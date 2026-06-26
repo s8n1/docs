@@ -48,7 +48,27 @@
             }
           },
           "400": {
-            "description": "Unexpected error",
+            "description": "Invalid request parameters. The `limit` query parameter must be a positive integer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed. The Bearer token is missing, expired, or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error. An unexpected error occurred while processing the request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -74,7 +94,7 @@
         },
         "responses": {
           "200": {
-            "description": "plant response",
+            "description": "Plant created successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -84,7 +104,37 @@
             }
           },
           "400": {
-            "description": "unexpected error",
+            "description": "Invalid request body. Required fields are missing or have invalid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed. The Bearer token is missing, expired, or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A plant with the specified ID already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error. An unexpected error occurred while processing the request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -113,11 +163,41 @@
         ],
         "responses": {
           "204": {
-            "description": "Plant deleted",
+            "description": "Plant deleted successfully",
             "content": {}
           },
           "400": {
-            "description": "unexpected error",
+            "description": "Invalid plant ID. The ID must be a positive integer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed. The Bearer token is missing, expired, or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No plant found with the specified ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error. An unexpected error occurred while processing the request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -198,10 +278,12 @@
         "type": "object",
         "properties": {
           "error": {
+            "description": "HTTP status code indicating the type of error",
             "type": "integer",
             "format": "int32"
           },
           "message": {
+            "description": "A human-readable message describing what went wrong",
             "type": "string"
           }
         }
