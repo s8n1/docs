@@ -3,6 +3,8 @@ title: 'Development'
 description: 'Preview changes locally to update your docs'
 ---
 
+import CliSetup from '/snippets/cli-setup.mdx';
+
 <Info>
   **Prerequisites**:
   - Node.js version 19 or higher
@@ -11,26 +13,7 @@ description: 'Preview changes locally to update your docs'
 
 Follow these steps to install and run Mintlify on your operating system.
 
-<Steps>
-<Step title="Install the Mintlify CLI">
-
-```bash
-npm i -g mint
-```
-</Step>
-
-<Step title="Preview locally">
-
-Navigate to your docs directory where your `docs.json` file is located, and run the following command:
-
-```bash
-mint dev
-```
-
-A local preview of your documentation will be available at `http://localhost:3000`.
-
-</Step>
-</Steps>
+<CliSetup />
 
 ## Custom ports
 
