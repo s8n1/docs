@@ -1,0 +1,191 @@
+---
+title: "Error handling"
+description: "Understand API error responses and how to handle them"
+---
+
+The Plant Store API uses standard HTTP status codes to indicate request outcomes. Successful requests return `2xx` codes, client errors return `4xx` codes, and server errors return `5xx` codes.
+
+## Error response format
+
+All error responses return a JSON object with two fields:
+
+<ResponseField name="error" type="integer" required>
+  The HTTP status code of the error.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  A human-readable description of what went wrong.
+</ResponseField>
+
+<ResponseExample>
+```json Error Response
+{
+  "error": 404,
+  "message": "No plant found with ID 42"
+}
+```
+</ResponseExample>
+
+## HTTP status codes
+
+### Success codes
+
+| Status | Description |
+| ------ | ----------- |
+| `200`  | Request succeeded. The response body contains the requested data. |
+| `204`  | Request succeeded with no response body. Used for delete operations. |
+
+### Client error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `400`  | **Bad Request.** The request body or query parameters are invalid. Check the `message` field for details. |
+| `401`  | **Unauthorized.** The Bearer token is missing, expired, or invalid. |
+| `404`  | **Not Found.** The requested resource does not exist. Verify the ID or path. |
+| `409`  | **Conflict.** The resource already exists. Used when creating a plant with a duplicate ID. |
+
+### Server error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `500`  | **Internal Server Error.** Something went wrong on the server. Retry the request or contact support if the issue persists. |
+
+## Handling errors by endpoint
+
+### GET /plants
+
+<AccordionGroup>
+  <Accordion title="400 — Invalid query parameters">
+    The `limit` parameter must be a positive integer.
+
+    ```json
+    {
+      "error": 400,
+      "message": "Invalid value for 'limit': must be a positive integer"
+    }
+    ```
+  </Accordion>
+  <Accordion title="401 — Authentication failed">
+    Include a valid Bearer token in the `Authorization` header.
+
+    ```json
+    {
+      "error": 401,
+      "message": "Invalid or expired Bearer token"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### POST /plants
+
+<AccordionGroup>
+  <Accordion title="400 — Invalid request body">
+    The request body must include the required `name` and `id` fields.
+
+    ```json
+    {
+      "error": 400,
+      "message": "Missing required field: 'name'"
+    }
+    ```
+  </Accordion>
+  <Accordion title="409 — Duplicate plant ID">
+    Each plant must have a unique `id`. Choose a different ID or update the existing plant.
+
+    ```json
+    {
+      "error": 409,
+      "message": "A plant with ID 7 already exists"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### DELETE /plants/{id}
+
+<AccordionGroup>
+  <Accordion title="400 — Invalid plant ID">
+    The `id` path parameter must be a positive integer.
+
+    ```json
+    {
+      "error": 400,
+      "message": "Invalid plant ID: must be a positive integer"
+    }
+    ```
+  </Accordion>
+  <Accordion title="404 — Plant not found">
+    No plant exists with the specified ID.
+
+    ```json
+    {
+      "error": 404,
+      "message": "No plant found with ID 42"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Example: handling errors in code
+
+<CodeGroup>
+```javascript Node.js
+const response = await fetch('http://sandbox.mintlify.com/plants', {
+  headers: { Authorization: `Bearer ${apiKey}` }
+});
+
+if (!response.ok) {
+  const error = await response.json();
+
+  switch (response.status) {
+    case 401:
+      throw new Error(`Auth failed: ${error.message}`);
+    case 400:
+      throw new Error(`Bad request: ${error.message}`);
+    default:
+      throw new Error(`Request failed (${error.error}): ${error.message}`);
+  }
+}
+
+const plants = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "http://sandbox.mintlify.com/plants",
+    headers={"Authorization": f"Bearer {api_key}"},
+)
+
+if response.status_code != 200:
+    error = response.json()
+    raise Exception(f"Request failed ({error['error']}): {error['message']}")
+
+plants = response.json()
+```
+
+```curl cURL
+curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  http://sandbox.mintlify.com/plants
+```
+</CodeGroup>
+
+## Best practices
+
+<Steps>
+  <Step title="Always check the status code">
+    Never assume a request succeeded. Check the HTTP status code before processing the response body.
+  </Step>
+  <Step title="Parse the error message">
+    The `message` field contains actionable details. Use it in logs and user-facing error displays.
+  </Step>
+  <Step title="Retry server errors with backoff">
+    For `500` errors, retry with exponential backoff. Start at 1 second and double the delay on each attempt, up to a maximum of 3 retries.
+  </Step>
+  <Step title="Do not retry client errors">
+    Errors in the `4xx` range indicate a problem with the request. Fix the request before retrying.
+  </Step>
+</Steps>
