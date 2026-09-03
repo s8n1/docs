@@ -24,7 +24,7 @@ from scipy.special import (
 )
 from sympy import (
     Eq, Function, Symbol, dsolve, sympify, Rational, sqrt as sym_sqrt,
-    cos, sin, exp, log, tan, pi, oo,
+    cos, sin, exp, log, tan, pi, oo, solve as sym_solve,
     besselj as sym_besselj,
     hermite as sym_hermite,
     laguerre as sym_laguerre,
@@ -134,16 +134,82 @@ def _solve_ode(request: SolverRequest, rhs: Callable[[float, np.ndarray], np.nda
     res = float(np.max(np.abs(deriv - expected))) if len(sol.t) > 2 else 0.0
     return SolverResult("success", method, sol.t.tolist(), vals.tolist(), res, sol.message)
 
-def _make_result_from_sympy(sol_expr: str, t_vals: np.ndarray, t_sym: Symbol, y_sym: Function) -> SolverResult:
-    """Evaluate a SymPy solution expression over a time grid."""
+def _fit_first_order_constant(sol: Any, y_fn: Function, t_sym: Symbol, t0: float, y0: float) -> Any | None:
+    """Return the right-hand side of the particular solution y(t0) = y0.
+
+    Accepts a first-order general solution ``Eq(y(t), <expr>)`` whose only free
+    symbols are integration constants (C1, C2, ...). Implicit integral forms,
+    lists of solutions, and second-order equations are left untouched (they
+    would need a derivative condition to be made unique). Returns None when no
+    safe fit is possible, so callers can fall back to the general solution.
+    """
     try:
-        expr = sympify(sol_expr.split("=", 1)[-1].strip() if "=" in sol_expr else sol_expr.strip(),
-                       locals={"t": t_sym, "C1": 1, "C2": 1, "C3": 1})
-        f = lambda tv: float(expr.subs(t_sym, tv))
-        y_vals = np.array([[f(tv)] for tv in t_vals])
-        return SolverResult("success", "symbolic", t_vals.tolist(), y_vals.tolist(), 0.0, "Exact symbolic solution", symbolic_solution=sol_expr)
+        if not isinstance(sol, Eq) or sol.lhs != y_fn:
+            return None
+        expr = sol.rhs
+        free = sorted(expr.free_symbols - {t_sym}, key=str)
+        if len(free) != 1 or not str(free[0]).startswith("C"):
+            return None  # only first-order, single-constant solutions are fitted
+        constant = free[0]
+        candidates = sym_solve(expr.subs(t_sym, t0) - y0, constant, dict=True)
+        for candidate in candidates:
+            value = candidate.get(constant)
+            if value is None:
+                continue
+            try:
+                numeric = float(value.evalf())
+            except (TypeError, ValueError):
+                continue  # non-real or non-numeric constant
+            if not np.isfinite(numeric):
+                continue
+            particular = expr.subs(constant, numeric)
+            if not (particular.free_symbols - {t_sym}):
+                return particular
+        return None
     except Exception:
-        return SolverResult("success", "symbolic", t_vals.tolist(), [[0.0]] * len(t_vals), 0.0, "Symbolic (evaluation deferred)", symbolic_solution=sol_expr)
+        return None
+
+
+def _deferred_sympy_result(t_vals: np.ndarray, pretty: str) -> SolverResult:
+    """Symbolic result that could not be evaluated numerically (implicit form,
+    poles on the grid, or a list of branches). The symbolic form is preserved
+    and plotted as a deferred/zero curve rather than a fabricated answer."""
+    return SolverResult("success", "symbolic", t_vals.tolist(), [[0.0]] * len(t_vals), 0.0,
+                        "Symbolic (evaluation deferred)", symbolic_solution=pretty)
+
+
+def _make_sympy_result(rhs_expr: Any, pretty: str, t_vals: np.ndarray, t_sym: Symbol,
+                       message: str = "Exact symbolic solution") -> SolverResult:
+    """Evaluate the SymPy expression y(t) = rhs_expr over a time grid."""
+    y_vals: list[list[float]] = []
+    ok = True
+    for tv in t_vals:
+        try:
+            value = float(rhs_expr.subs(t_sym, tv))
+        except Exception:
+            ok = False
+            break
+        if not np.isfinite(value):
+            ok = False
+            break
+        y_vals.append([value])
+    if not ok:
+        return _deferred_sympy_result(t_vals, pretty)
+    return SolverResult("success", "symbolic", t_vals.tolist(), y_vals, 0.0, message, symbolic_solution=pretty)
+
+
+def _result_from_dsolve(sol: Any, t_vals: np.ndarray, t_sym: Symbol,
+                        message: str = "Exact general solution (constants set to 1 for plotting)") -> SolverResult:
+    """Render a SymPy dsolve result: substitute free constants with 1 for the
+    demo curve while keeping the general solution text in the response."""
+    if isinstance(sol, Eq):
+        expr = sol.rhs
+        constants = [c for c in sorted(expr.free_symbols - {t_sym}, key=str) if str(c).startswith("C")]
+        if constants:
+            expr = expr.subs({c: 1 for c in constants})
+            return _make_sympy_result(expr, str(sol), t_vals, t_sym, message=message)
+        return _make_sympy_result(expr, str(sol), t_vals, t_sym, message="Exact symbolic solution")
+    return _deferred_sympy_result(t_vals, str(sol))
 
 # ---------------------------------------------------------------------------
 # 1–13: SymPy-based ODE solvers
@@ -160,7 +226,20 @@ def _solve_sym_ode(req: SolverRequest, eq_str: str, y_name: str = "y", t_name: s
         eq = Eq(y.diff(t), parsed) if not isinstance(parsed, Eq) else parsed
         sol = dsolve(eq, y)
         t_vals = np.linspace(req.t_span[0], req.t_span[1], req.points)
-        return _make_result_from_sympy(str(sol), t_vals, t, y_fn)
+        if not isinstance(sol, Eq) or sol.lhs != y:
+            return _deferred_sympy_result(t_vals, str(sol))
+        rhs = sol.rhs
+        message = "Exact general solution (constants set to 1 for plotting)"
+        if req.initial_values:
+            fitted = _fit_first_order_constant(sol, y, t, float(req.t_span[0]), float(req.initial_values[0]))
+            if fitted is not None:
+                rhs = fitted
+                message = f"Exact solution honoring {y_name}({t_name}0) = {float(req.initial_values[0]):g}"
+                return _make_sympy_result(rhs, str(Eq(y, rhs)), t_vals, t, message=message)
+        constants = [c for c in sorted(rhs.free_symbols - {t}, key=str) if str(c).startswith("C")]
+        if constants:
+            rhs = rhs.subs({c: 1 for c in constants})
+        return _make_sympy_result(rhs, str(sol), t_vals, t, message=message)
     except (SympifyError, ValueError, TypeError, NotImplementedError) as exc:
         return SolverResult("failed", "symbolic", [], [], float("inf"), f"Symbolic solver failed: {exc}")
 
@@ -207,7 +286,7 @@ def _solve_euler_cauchy(req: SolverRequest) -> SolverResult:
     try:
         sol = dsolve(t**2 * y(t).diff(t, 2) + t * y(t).diff(t) - y(t), y(t))
         t_vals = np.linspace(max(req.t_span[0], 0.01), req.t_span[1], req.points)
-        return _make_result_from_sympy(str(sol), t_vals, t, y)
+        return _result_from_dsolve(sol, t_vals, t)
     except Exception as exc:
         return SolverResult("failed", "symbolic", [], [], float("inf"), str(exc))
 
@@ -223,7 +302,7 @@ def _solve_constant_coeff_second_order(req: SolverRequest) -> SolverResult:
     try:
         sol = dsolve(eq, y(t))
         t_vals = np.linspace(req.t_span[0], req.t_span[1], req.points)
-        return _make_result_from_sympy(str(sol), t_vals, t, y)
+        return _result_from_dsolve(sol, t_vals, t)
     except Exception as exc:
         return SolverResult("failed", "symbolic", [], [], float("inf"), f"Second-order solve failed: {exc}")
 
@@ -236,7 +315,7 @@ def _solve_constant_coeff_higher_order(req: SolverRequest) -> SolverResult:
     try:
         sol = dsolve(y(t).diff(t, 3) + a * y(t), y(t))
         t_vals = np.linspace(req.t_span[0], req.t_span[1], req.points)
-        return _make_result_from_sympy(str(sol), t_vals, t, y)
+        return _result_from_dsolve(sol, t_vals, t)
     except Exception:
         return SolverResult("failed", "symbolic", [], [], float("inf"), "Higher-order symbolic solve failed")
 

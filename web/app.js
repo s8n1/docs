@@ -64,12 +64,12 @@ let LANG = "en";
 const MODEL_DEFS = {
   /* --- symbolic first-order / classical ODE families --- */
   separable: { g: "sym", en: "Separable", fa: "جداپذیر", t0: 0.01, t1: 1.0 },
-  exact: { g: "sym", en: "Exact", fa: "دقیق", t0: 0.01, t1: 1.0, y0: 0 },
+  exact: { g: "sym", en: "Exact", fa: "دقیق", t0: 0.01, t1: 1.0, y0: 1.0 },
   linear_first_order: { g: "sym", en: "Linear first-order", fa: "خطی مرتبهٔ اول", t0: 0, t1: 1.0, params: [["rate", "rate / نرخ", 1.0]] },
   bernoulli: { g: "sym", en: "Bernoulli", fa: "برنولی", t0: 0.01, t1: 1.0, y0: 0.5 },
   riccati: { g: "sym", en: "Riccati", fa: "ریکاتی", t0: 0, t1: 0.5, y0: 0 },
   autonomous: { g: "sym", en: "Autonomous", fa: "خودمختار", t0: 0.01, t1: 1.0, y0: 0.5 },
-  homogeneous_first_order: { g: "sym", en: "Homogeneous first-order", fa: "همگن مرتبهٔ اول", t0: 0.1, t1: 1.0 },
+  homogeneous_first_order: { g: "sym", en: "Homogeneous first-order", fa: "همگن مرتبهٔ اول", t0: 0.1, t1: 1.0, y0: 0.1 },
   integrating_factor: { g: "sym", en: "Integrating factor", fa: "عامل انتگرال‌ساز", t0: 0, t1: 1.0 },
   euler_cauchy: { g: "sym", en: "Euler–Cauchy", fa: "اویلر–کوشی", t0: 0.1, t1: 2.0 },
   undetermined_coefficients: { g: "sym", en: "Undetermined coefficients", fa: "ضرایب نامعین", t0: 0, t1: 1.0 },

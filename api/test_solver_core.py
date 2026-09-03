@@ -295,4 +295,56 @@ def test_local_classifier():
 
 def test_symbolic_parser():
     assert try_symbolic_first_order("__import__('os')") is None
+
+
+# ======================================================================
+# Symbolic solutions honor the supplied initial condition
+# ======================================================================
+def test_symbolic_separable_particular_solution():
+    # y' = y, y(0) = 2  →  y(t) = 2*e^t, so y(1) = 2e
+    res = solve_builtin(SolverRequest("separable", ("y",), (0.0, 1.0), (2.0,), {"rate": 1.0}, points=50))
+    assert res.status == "success"
+    assert abs(res.y[-1][0] - 2 * np.e) < 1e-6
+    assert "C1" not in (res.symbolic_solution or ""), "expected a particular solution, not a general one"
+
+def test_symbolic_linear_particular_solution():
+    # y' = -2y, y(0) = 3  →  y(t) = 3*e^(-2t), so y(1) = 3*e^-2
+    res = solve_builtin(SolverRequest("linear_first_order", ("y",), (0.0, 1.0), (3.0,), {"rate": 2.0}, points=50))
+    assert res.status == "success"
+    assert abs(res.y[-1][0] - 3 * np.exp(-2)) < 1e-6
+
+def test_symbolic_bernoulli_particular_solution():
+    # y' = y - y^2, y(0) = 1/2  →  y(t) = 1/(e^-t + 1), so y(1) ≈ 0.7310586
+    res = solve_builtin(SolverRequest("bernoulli", ("y",), (0.0, 1.0), (0.5,), {}, points=50))
+    assert res.status == "success"
+    assert abs(res.y[-1][0] - 1 / (np.exp(-1) + 1)) < 1e-6
+
+def test_first_order_symbolic_models_start_at_initial_value():
+    """Every first-order symbolic family must return a curve that passes
+    through the supplied y(t0). Second-order families need y'(t0) as well,
+    so they intentionally keep the general solution."""
+    cases = [
+        ("separable", 0.3, 1.7, {"rate": 1.0}),
+        ("linear_first_order", 0.2, 0.77, {"rate": 1.0}),
+        ("exact", 0.2, 1.3, {}),
+        ("bernoulli", 0.2, 0.4, {}),
+        ("autonomous", 0.2, 0.6, {}),
+        ("homogeneous_first_order", 0.2, 0.3, {}),
+        ("integrating_factor", 0.1, 1.2, {}),
+        ("laplace_transform", 0.1, 0.9, {}),
+        ("riccati", 0.2, 0.4, {}),
+        ("undetermined_coefficients", 0.2, 1.1, {}),
+    ]
+    for model, t0, y0, params in cases:
+        res = solve_builtin(SolverRequest(model, ("y",), (t0, t0 + 1.0), (y0,), params, points=20))
+        assert res.status == "success", model
+        assert abs(res.y[0][0] - y0) < 1e-6, f"{model}: y({t0})={res.y[0][0]} expected {y0}"
+        assert "honoring" in (res.message or ""), f"{model}: message should report the fitted IC"
+
+def test_second_order_keeps_general_solution():
+    """No derivative condition is supplied, so 2nd-order families stay general."""
+    res = solve_builtin(SolverRequest("constant_coefficient_second_order", ("y",), (0.0, 1.0), (1.0,),
+                       {"a": 1.0, "b": 0.0, "c": -1.0}, points=20))
+    assert res.status == "success"
+    assert "general solution" in (res.message or "")
     assert try_symbolic_first_order("-y") is not None
