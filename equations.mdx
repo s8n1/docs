@@ -5,14 +5,18 @@ description: "Bilingual, static examples for checking equation support"
 
 # Equation Test / آزمون معادلات
 
-This page is a **documentation test fixture**, not an interactive solver. Each result is shown with intermediate steps so it can be checked by inspection.
+This page is a **documentation test fixture**: each result is shown with intermediate steps so it can be checked by inspection.
 
-این صفحه یک **نمونهٔ مستندات** است، نه حل‌کنندهٔ تعاملی. نتیجهٔ هر مثال همراه با مراحل میانی نمایش داده شده تا به‌صورت دستی قابل بررسی باشد.
+این صفحه یک **نمونهٔ مستندات** است؛ نتیجهٔ هر مثال همراه با مراحل میانی نمایش داده شده تا به‌صورت دستی قابل بررسی باشد.
 
 <Note>
-  The current project is a Mintlify documentation site. It does not execute user-provided equations or evaluate arbitrary code.
+  This page stays static (no code execution). The **live interactive solver** — model picker for all 42 families, free-form symbolic input, bilingual UI — is the web app served by the Python API:
 
-  پروژهٔ فعلی یک سایت مستندات Mintlify است و معادلات دریافتی از کاربر یا کد دلخواه را اجرا نمی‌کند.
+  ```bash
+  npm run api    # then open http://localhost:8000
+  ```
+
+  این صفحه ثابت است (بدون اجرای کد). **حل‌کنندهٔ تعاملی** — انتخاب مدل از میان هر ۴۲ خانواده، ورودی نمادین آزاد، رابط دو‌زبانه — در اپلیکیشن وبی است که API پایتون سرو می‌کند.
 </Note>
 
 ## 1. Linear equation / معادلهٔ خطی
@@ -91,9 +95,9 @@ x = 9
 - [x] Equations render as plain text and code blocks without client-side execution.
 - [x] English and Persian explanations are included together.
 - [x] Linear, quadratic, simultaneous, and fractional examples are covered.
-- [ ] Interactive input and symbolic solving are **not** implemented yet.
+- [x] Interactive input and symbolic/numerical solving are implemented in the separate web app (`npm run api` → http://localhost:8000).
 
 - [x] نمایش معادلات بدون اجرای سمت کاربر انجام می‌شود.
 - [x] توضیحات انگلیسی و فارسی در کنار هم آمده‌اند.
 - [x] مثال‌های خطی، درجهٔ دوم، دستگاهی و کسری پوشش داده شده‌اند.
-- [ ] ورودی تعاملی و حل نمادین هنوز پیاده‌سازی نشده است.
+- [x] ورودی تعاملی و حل نمادین/عددی در اپلیکیشن وبی جداگانه پیاده‌سازی شده است (`npm run api` → http://localhost:8000).

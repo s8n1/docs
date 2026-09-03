@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DiffEQ Engine — Differential Equation Solver</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%E2%88%AB%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">∫</span>
+      <div>
+        <h1 id="brand-title">DiffEQ Engine</h1>
+        <p id="brand-sub">Symbolic + numerical differential equation solver · 42 model families</p>
+      </div>
+    </div>
+    <div class="lang-toggle" role="group" aria-label="Language">
+      <button type="button" id="lang-en" class="lang-btn active" data-lang="en">EN</button>
+      <button type="button" id="lang-fa" class="lang-btn" data-lang="fa">فارسی</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="banner-connecting" class="banner banner-warn hidden"></div>
+    <div id="banner-error" class="banner banner-error hidden"></div>
+
+    <nav class="tabs" id="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="catalog" role="tab">Model solver</button>
+      <button type="button" class="tab" data-tab="freeform" role="tab">Free equation</button>
+    </nav>
+
+    <!-- ============ Model catalog tab ============ -->
+    <section id="panel-catalog" class="panel" role="tabpanel">
+      <div class="grid">
+        <div class="card">
+          <h2 id="cat-model-title">1 · Choose a model family</h2>
+          <label class="field">
+            <span class="lbl" data-i18n="search">Search models…</span>
+            <input type="search" id="model-search" autocomplete="off" />
+          </label>
+          <label class="field">
+            <select id="model-select" size="10"></select>
+          </label>
+          <div id="model-desc" class="model-desc"></div>
+        </div>
+
+        <div class="card">
+          <h2 id="cat-param-title">2 · Configure inputs</h2>
+
+          <div class="param-row grid2">
+            <label class="field">
+              <span class="lbl" data-i18n="t0">t start (t₀)</span>
+              <input type="number" step="any" id="p-t0" value="0" />
+            </label>
+            <label class="field">
+              <span class="lbl" data-i18n="t1">t end (t₁)</span>
+              <input type="number" step="any" id="p-t1" value="1" />
+            </label>
+          </div>
+
+          <div id="ic-grid" class="ic-grid"></div>
+          <div id="param-grid" class="param-grid"></div>
+
+          <div id="grid-profile" class="hidden">
+            <label class="field">
+              <span class="lbl" data-i18n="profile">Initial spatial profile</span>
+              <select id="p-profile">
+                <option value="sine" data-i18n="profile-sine">sine bump</option>
+                <option value="gauss">gaussian bump</option>
+                <option value="flat">constant</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="lbl" data-i18n="amplitude">Amplitude</span>
+              <input type="number" step="any" id="p-amplitude" value="1" />
+            </label>
+            <p class="hint" data-i18n="profile-hint">Spatial grid values are generated from the profile.</p>
+          </div>
+
+          <div class="param-row grid3">
+            <label class="field">
+              <span class="lbl">Method</span>
+              <select id="p-method">
+                <option value="auto">auto</option>
+                <option value="RK45">RK45</option>
+                <option value="BDF">BDF (stiff)</option>
+                <option value="Radau">Radau (stiff)</option>
+                <option value="LSODA">LSODA</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="lbl" data-i18n="points">Output points</span>
+              <input type="number" min="2" max="2000" id="p-points" value="200" />
+            </label>
+            <label class="field">
+              <span class="lbl">rtol</span>
+              <input type="number" step="any" id="p-rtol" value="1e-7" />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button type="button" class="btn btn-primary" id="btn-solve">⚡ Solve</button>
+            <button type="button" class="btn" id="btn-example">Try an example</button>
+          </div>
+        </div>
+      </div>
+
+      <section id="results" class="card hidden">
+        <div class="result-head">
+          <h2 data-i18n="result-title">Solution</h2>
+          <span class="chips" id="res-chips"></span>
+        </div>
+        <div id="res-symbolic" class="symbolic hidden"></div>
+        <div id="res-eigen" class="eigen hidden"></div>
+        <div class="plot-wrap hidden"><canvas id="plot" width="900" height="380"></canvas><div id="plot-legend" class="legend"></div></div>
+        <div class="res-grid" id="res-grid"></div>
+        <div class="meta">
+          <h3 data-i18n="meta-title">Solver metadata</h3>
+          <pre id="res-meta"></pre>
+        </div>
+      </section>
+    </section>
+
+    <!-- ============ Free equation tab ============ -->
+    <section id="panel-freeform" class="panel hidden" role="tabpanel">
+      <div class="card">
+        <h2 data-i18n="free-title">Solve a first-order ODE symbolically</h2>
+        <p class="hint" data-i18n="free-hint">Write only the right-hand side f(t, y) of y' = f(t, y). Examples: <code>-y</code>, <code>-2*y + sin(t)</code>, <code>y*(1 - y/10)</code>.</p>
+        <div class="free-form">
+          <label class="field grow">
+            <span class="lbl">y′ = f(t, y)</span>
+            <input type="text" id="free-eq" placeholder="-2*y + sin(t)" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span class="lbl">dependent (y)</span>
+            <input type="text" id="free-dep" value="y" />
+          </label>
+          <label class="field">
+            <span class="lbl">independent (t)</span>
+            <input type="text" id="free-ind" value="t" />
+          </label>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="btn-free-solve">Solve symbolically</button>
+          <button type="button" class="btn" id="btn-free-classify">Classify (local)</button>
+        </div>
+        <div id="free-res" class="result-pane hidden"></div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="about-title">Engine</h2>
+        <ul class="about">
+          <li data-i18n="about1">SymPy for exact solutions of ODE families.</li>
+          <li data-i18n="about2">SciPy RK45 / BDF / Radau / LSODA for numerical systems, with automatic BDF for stiff problems.</li>
+          <li data-i18n="about3">Finite-difference solvers for heat, wave, advection, Laplace and Poisson PDEs.</li>
+          <li data-i18n="about4">Boundary value problems, Sturm–Liouville eigenvalues, delay equations, and inverse (curve-fit) problems.</li>
+          <li data-i18n="about5">Every result carries a residual check and verification metadata. No user input is ever executed as code.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span id="foot-health">API: <b id="health-state">checking…</b> · models: <b id="health-models">–</b></span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

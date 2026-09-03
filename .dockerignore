@@ -1,0 +1,10 @@
+.git
+.gitignore
+.venv/
+node_modules/
+.mintlify/
+__pycache__/
+.pytest_cache/
+export.zip
+*.pyc
+*.log

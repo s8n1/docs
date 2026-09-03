@@ -7,8 +7,12 @@
     "dev": "mintlify dev --no-open --port ${PORT:-3000}",
     "preview": "mintlify dev --no-open --port ${PORT:-3000}",
     "build": "mintlify export",
-    "api": "uvicorn api.main:app --host 0.0.0.0 --port ${API_PORT:-8000}",
-    "test:solver": "python3 -m pytest api/test_solver_core.py"
+    "start": "sh scripts/serve.sh",
+    "api": "sh scripts/serve.sh",
+    "setup": "sh scripts/setup.sh",
+    "solve": "python3 -m api.cli",
+    "test:solver": "python3 -m pytest api/test_solver_core.py",
+    "test:all": "python3 -m pytest api/ -q"
   },
   "devDependencies": {
     "mintlify": "^4.2.788"
