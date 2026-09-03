@@ -18,7 +18,9 @@
             "pages": [
               "index",
               "quickstart",
-              "development"
+              "development",
+              "equations",
+              "solver-architecture"
             ]
           },
           {

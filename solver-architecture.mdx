@@ -1,0 +1,48 @@
+---
+title: "Solver Architecture / معماری حل‌کننده"
+description: "How the product solves and verifies differential equations"
+---
+
+# Solver Architecture / معماری حل‌کننده
+
+The intended product is an **automatic differential-equation solver**, not a tutorial. The user enters an equation and receives the strongest result the system can validate.
+
+محصول هدف یک **حل‌کنندهٔ خودکار معادلات دیفرانسیل** است، نه یک راهنمای آموزشی. کاربر معادله را وارد می‌کند و سیستم قوی‌ترین نتیجهٔ قابل‌اعتبارسنجی را برمی‌گرداند.
+
+## Result policy / سیاست نتیجه
+
+The solver follows this order:
+
+1. Normalize the input into a safe mathematical representation.
+2. Classify it against the supported model catalog.
+3. Attempt symbolic solving.
+4. Fall back to numerical solving when a closed form is unavailable.
+5. Validate the result with residuals, initial/boundary conditions, convergence, and solver diagnostics.
+6. Return a complete answer, an approximate answer, or the furthest verified partial result with a technical reason.
+
+ترتیب پردازش:
+
+1. تبدیل ورودی به نمایش ریاضی امن
+2. تشخیص مدل از میان مدل‌های پشتیبانی‌شده
+3. تلاش برای حل نمادین
+4. استفاده از حل عددی در صورت نبود جواب بسته
+5. بررسی residual، شرایط اولیه/مرزی، همگرایی و خطا
+6. ارائهٔ جواب کامل، تقریبی یا بیشترین نتیجهٔ معتبر به‌همراه دلیل فنی
+
+## Stiff and multivariable systems / سیستم‌های stiff و چندمتغیره
+
+For systems such as `y' = f(t, y)` with many state variables, the numerical engine selects appropriate methods and tolerances. Stiff problems use implicit methods such as BDF or Radau, with bounded step counts and wall time. Results include the selected method, tolerances, status, and error estimates.
+
+برای سیستم‌های چندمتغیره، روش‌های عددی مناسب با توجه به stiff بودن مسئله انتخاب می‌شوند. برای مسائل stiff از روش‌های ضمنی مانند BDF یا Radau استفاده می‌شود و تعداد گام، زمان اجرا و منابع محدود خواهند بود.
+
+## AI responsibility / نقش هوش مصنوعی
+
+AI may interpret natural language, identify variables and conditions, and explain verified output in Persian or English. It must not invent a solution or execute generated code. The numerical engine is the authority, and every answer must carry verification metadata.
+
+هوش مصنوعی زبان طبیعی را تفسیر می‌کند، متغیرها و شرایط را تشخیص می‌دهد و نتیجهٔ معتبر را توضیح می‌دهد؛ اما حق ساختن جواب بدون بررسی یا اجرای کد تولیدشده را ندارد.
+
+## 42 supported families
+
+The implementation roadmap covers 42 explicit model families, including separable, exact, linear, Bernoulli, Riccati, autonomous, logistic, homogeneous, higher-order constant-coefficient, Euler-Cauchy, Laplace, Fourier, systems, stiff systems, BVPs, eigenvalue problems, nonlinear numerical problems, and representative PDE/discretization families. Every family must have a named adapter, supported syntax, limitations, and regression cases before being marked supported.
+
+> “Supported” means the model has an implemented adapter and automated verification tests. It does not mean every arbitrary equation in that family has a closed-form solution.

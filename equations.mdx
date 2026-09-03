@@ -1,0 +1,99 @@
+---
+title: "Equation Test / آزمون معادلات"
+description: "Bilingual, static examples for checking equation support"
+---
+
+# Equation Test / آزمون معادلات
+
+This page is a **documentation test fixture**, not an interactive solver. Each result is shown with intermediate steps so it can be checked by inspection.
+
+این صفحه یک **نمونهٔ مستندات** است، نه حل‌کنندهٔ تعاملی. نتیجهٔ هر مثال همراه با مراحل میانی نمایش داده شده تا به‌صورت دستی قابل بررسی باشد.
+
+<Note>
+  The current project is a Mintlify documentation site. It does not execute user-provided equations or evaluate arbitrary code.
+
+  پروژهٔ فعلی یک سایت مستندات Mintlify است و معادلات دریافتی از کاربر یا کد دلخواه را اجرا نمی‌کند.
+</Note>
+
+## 1. Linear equation / معادلهٔ خطی
+
+**Test:** `2x + 6 = 14`
+
+**Solution:**
+
+```text
+2x + 6 = 14
+2x = 14 - 6
+2x = 8
+x = 4
+```
+
+**Answer / پاسخ:** `x = 4`
+
+## 2. Quadratic equation / معادلهٔ درجهٔ دوم
+
+**Test:** `x² - 5x + 6 = 0`
+
+Factor the polynomial:
+
+```text
+x² - 5x + 6 = (x - 2)(x - 3)
+(x - 2)(x - 3) = 0
+```
+
+Therefore:
+
+```text
+x = 2  or  x = 3
+```
+
+**Answer / پاسخ:** `x ∈ {2, 3}`
+
+## 3. Simultaneous equations / دستگاه معادلات
+
+**Test:**
+
+```text
+x + y = 10
+x - y = 2
+```
+
+Add the equations:
+
+```text
+2x = 12
+x = 6
+```
+
+Substitute into the first equation:
+
+```text
+6 + y = 10
+y = 4
+```
+
+**Answer / پاسخ:** `x = 6, y = 4`
+
+## 4. Fraction equation / معادلهٔ کسری
+
+**Test:** `x/3 + 2 = 5`
+
+```text
+x/3 = 5 - 2
+x/3 = 3
+x = 9
+```
+
+**Answer / پاسخ:** `x = 9`
+
+## Verification checklist / چک‌لیست بررسی
+
+- [x] Equations render as plain text and code blocks without client-side execution.
+- [x] English and Persian explanations are included together.
+- [x] Linear, quadratic, simultaneous, and fractional examples are covered.
+- [ ] Interactive input and symbolic solving are **not** implemented yet.
+
+- [x] نمایش معادلات بدون اجرای سمت کاربر انجام می‌شود.
+- [x] توضیحات انگلیسی و فارسی در کنار هم آمده‌اند.
+- [x] مثال‌های خطی، درجهٔ دوم، دستگاهی و کسری پوشش داده شده‌اند.
+- [ ] ورودی تعاملی و حل نمادین هنوز پیاده‌سازی نشده است.

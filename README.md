@@ -1,43 +1,47 @@
-# Mintlify Starter Kit
+# Differential Equation Intelligence
 
-Use the starter kit to get your docs deployed and ready to customize.
+This repository currently contains the Mintlify documentation shell for a planned bilingual differential-equation solving product. The production product must execute equation solving in a separate, resource-limited API; documentation alone cannot solve user equations.
 
-Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
+## Product contract
 
-- Guide pages
-- Navigation
-- Customizations
-- API reference pages
-- Use of popular components
+After a user submits an equation, the service should attempt to return:
 
-**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
+1. A symbolic closed-form solution when one exists.
+2. Otherwise a numerically validated solution with method, tolerances, initial/boundary conditions, and residual/error metrics.
+3. If the problem cannot be solved reliably, a precise limitation and the furthest validated result—not generic instructions.
 
-## Development
+The system must never claim universal solvability. Nonlinear, chaotic, singular, ill-posed, and high-dimensional problems require numerical checks and may only have approximate solutions.
 
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
+## Required architecture
 
+- **Web client:** bilingual Persian/English input, equations in LaTeX or structured form, plots, steps, residuals, and downloadable results.
+- **Independent solver API:** Python service using SymPy for symbolic work and SciPy `solve_ivp` methods (`BDF`, `Radau`, and `LSODA` where available) for stiff and non-stiff systems.
+- **Safe execution:** parse into an allowlisted equation AST; never use `eval`, execute generated Python, or accept arbitrary user code. Enforce limits on dimensions, time span, steps, memory, CPU, and wall time.
+- **AI reasoning layer:** normalize natural-language requests, classify them against the 42 supported model families, select a solver, and explain verified results. The AI is not the numerical authority; solver output and residual checks are.
+- **Job storage/queue:** persist status and results separately from the docs site. Use a managed database and a background-job system for expensive solves.
+
+## 42-model coverage
+
+The final catalog should include tests and solver adapters for first-order ODEs, separable/exact/linear/Bernoulli/Riccati forms, higher-order constant-coefficient equations, Euler-Cauchy equations, systems of ODEs, stiff systems, boundary-value problems, eigenvalue problems, Laplace/Fourier forms, and representative nonlinear, PDE, and numerical families. Each family needs explicit assumptions, supported syntax, fallback behavior, and verification tests.
+
+## Local documentation preview
+
+```bash
+npm install
+npm run dev
 ```
-npm i -g mint
+
+The current `npm run build` command validates and exports the Mintlify documentation. The local solver and pattern classifier run independently in Python and do not require an external API. External AI is optional enhancement only, not a runtime dependency for built-in models.
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pytest api/test_solver_core.py -q
+.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
-Run the following command at the root of your documentation, where your `docs.json` is located:
+`POST /solve` uses local allowlisted adapters. `POST /analyze` uses the offline classifier and always works without credentials. `POST /analyze/enhanced` optionally calls an OpenAI-compatible provider and falls back to the local classifier on failure. The solver does not depend on AI or any external API to compute deterministic built-in models.
 
-```
-mint dev
-```
+## Required production configuration
 
-View your local preview at `http://localhost:3000`.
-
-## Publishing changes
-
-Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
-
-## Need help?
-
-### Troubleshooting
-
-- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
-- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
-
-### Resources
-- [Mintlify documentation](https://mintlify.com/docs)
+The solver API will require provider-specific values configured through the environment manager, not committed to this repository. No AI key is required for local classification or deterministic solving. `AI_API_KEY` or `SAMBANOVA_API_KEY` is optional and only enables enhanced natural-language interpretation. Database/queue configuration is required only for persistent, distributed production jobs; the local engine runs without them.
