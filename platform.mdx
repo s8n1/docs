@@ -1,0 +1,88 @@
+---
+title: "Subscriptions & Admin / اشتراک و مدیریت"
+description: "Accounts, plans, payment gateways, and the admin panel"
+---
+
+# Subscriptions & Admin / اشتراک و مدیریت
+
+The solver engine is wrapped in a commercial layer: password accounts, subscription plans with automatic expiry enforcement, three payment gateways (ZarinPal, IDPay, USDT-TRC20), and an admin panel for managing users, subscriptions, orders, and site settings.
+
+موتور حلکننده با یک لایهٔ تجاری احاطه شده است: حسابهای رمزعبوری، پلنهای اشتراک با اعمال خودکار محدودیت پس از اتمام اعتبار، سه درگاه پرداخت (زرینپال، آیدیپی و USDT-TRC20) و پنل ادمین برای مدیریت کاربران، اشتراکها، سفارشها و تنظیمات سایت.
+
+## Accounts & roles / حسابها و نقشها
+
+- **Register / ثبتنام:** `/api/auth/register` — the **first registered user automatically becomes the admin** (there is exactly one recovery path: the first account).
+- **Login / Logout:** `/api/auth/login`, `/api/auth/logout` — sessions are opaque random tokens in an HttpOnly, SameSite=Lax cookie (`de_session`, 30 days).
+- **Passwords / رمز عبور:** PBKDF2-HMAC-SHA256 (200k iterations, per-user salt). Minimum length 8.
+- **Banned users / کاربران مسدود:** cannot log in or solve.
+- Admin safety guards: an admin cannot demote or ban their own account, and the last admin cannot be demoted.
+
+## Plans & enforcement / پلنها و اعمال محدودیت
+
+Plans live in the `plans` table (Free, Pro Monthly, Pro Yearly seeded by default; editable via SQL or the admin panel for prices/limits).
+
+| Field | Meaning |
+|---|---|
+| `solves_per_day` | Daily solve cap (Free: 5, Pro: 100/1000) |
+| `max_points` | Max output points per solve (Free: 500, Pro: 5000/20000) |
+| `premium_models` | Models blocked on the free tier (setting key) |
+| `duration_days` | Subscription length (0 = free tier) |
+
+**Automatic restriction / اعمال خودکار محدودیت:** every request re-checks `active_subscription()` — rows whose `ends_at` has passed are flipped to `expired` on read. The account immediately returns to the free tier: premium models are blocked, the daily/points caps apply again, and the UI shows an upgrade banner (HTTP `402` with `code: daily_limit | points_limit | premium_model` and `upgrade_url: /pricing`). No cron job needed.
+
+Symbolic solves (`/solve/symbolic`) are gated by the same quota — there is no free bypass.
+
+## Payment gateways / درگاههای پرداخت
+
+Order flow: `POST /api/payment/start` → gateway → callback (ZarinPal/IDPay) or admin confirmation (crypto) → subscription granted/extended.
+
+| Gateway | How it works | Required config |
+|---|---|---|
+| ZarinPal (v4) | Redirect to bank payment; callback verifies with the gateway | `ZARINPAL_MERCHANT_ID` (+ `ZARINPAL_SANDBOX=1` for testing) |
+| IDPay (v1.1) | Redirect to bank payment; callback verifies with the gateway | `IDPAY_API_KEY` (+ `IDPAY_SANDBOX=1`) |
+| USDT-TRC20 | Direct transfer to the admin wallet; user submits a TXID; admin confirms in the panel | `USDT_TRC20_WALLET` or admin setting `usdt_wallet` |
+
+Security notes:
+
+- Crypto TXIDs can only be submitted for the caller's own orders.
+- An order can be confirmed **once** — replayed callbacks or a second admin click cannot double-grant a plan.
+- Callback/verify failures never activate a subscription.
+
+## Admin panel / پنل مدیریت
+
+`/admin` (or `/static/admin.html`) — admin-only:
+
+- **Dashboard / داشبورد:** user counts, active subscriptions, orders, revenue by currency, solves today.
+- **Users / کاربران:** role changes, grant/extend subscriptions (manual), ban/unban.
+- **Orders / سفارشها:** review every order; confirm pending crypto payments.
+- **Settings / تنظیمات:** `usdt_wallet` and `premium_models` (JSON array of model names).
+
+All admin routes live under `/api/admin/*` and require the admin role server-side.
+
+## API summary / خلاصهٔ API
+
+```text
+POST /api/auth/register | /login | /logout
+GET  /api/me                     → user + entitlement
+GET  /api/plans                  → plan catalog
+GET  /api/my-orders              → own orders
+POST /api/payment/start          → {gateway, redirect_url | wallet, order_id}
+GET  /api/payment/zarinpal/callback  (Authority, Status)
+GET  /api/payment/idpay/callback     (id, order_id)
+POST /api/payment/crypto/tx      → submit TXID
+GET  /api/admin/stats | /users | /orders | /settings
+PATCH /api/admin/users/{id}/role | /ban
+POST /api/admin/subscriptions/grant
+POST /api/admin/orders/{id}/confirm
+POST /api/admin/settings
+```
+
+## Trying it locally / تست محلی
+
+```bash
+npm run api          # → http://localhost:8000
+# 1) register at /auth            → first account is the admin
+# 2) /admin                       → grant yourself a plan (no payment needed)
+# 3) /pricing → USDT → TXID       → confirm from /admin → PRO active
+# 4) expire it (SQL or wait)      → free tier limits apply automatically
+```

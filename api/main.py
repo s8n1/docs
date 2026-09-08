@@ -92,6 +92,9 @@ class CryptoTxBody(BaseModel):
     txid: str = Field(min_length=4, max_length=200)
 
 
+SYMBOLIC_POINTS = 10
+
+
 # ---------------------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------------------
@@ -281,8 +284,11 @@ def idpay_callback(id: str, order_id: str, request: Request) -> RedirectResponse
 
 @app.post("/api/payment/crypto/tx")
 def crypto_tx(body: CryptoTxBody, request: Request) -> dict[str, Any]:
-    auth.require_user(request)
-    order = payments.crypto_submit_tx(body.order_id, body.txid.strip())
+    user = auth.require_user(request)
+    try:
+        order = payments.crypto_submit_tx(body.order_id, body.txid.strip(), user["id"])
+    except payments.PaymentError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return {"ok": True, "order_id": order["id"], "status": order["status"],
             "message": "Transaction submitted — an admin will verify it."}
 
@@ -365,12 +371,27 @@ def enhanced_analyze(body: AnalyzeBody) -> dict[str, object]:
 
 
 @app.post("/solve/symbolic")
-def symbolic(body: SymbolicBody) -> dict[str, object]:
+def symbolic(body: SymbolicBody, request: Request, response: Response) -> dict[str, object]:
+    # Symbolic solves consume quota like any other solve — no free bypass.
+    entitlement, user, session = _resolve_entitlement(request, response)
+    try:
+        plans.check_access(entitlement, "symbolic", SYMBOLIC_POINTS)
+    except plans.LimitError as exc:
+        raise _limit_response(exc) from exc
     result = try_symbolic_first_order(body.equation, body.variable, body.independent)
     if result is None:
         raise HTTPException(422, "No verified symbolic solution was found")
-    return {"status": "success", "solution": result, "verified": False,
-            "message": "Symbolic result requires numerical verification for the supplied conditions."}
+    owner = "user" if user else ("session" if session else "anon")
+    owner_id = str(user["id"]) if user else (session["token"] if session else "anon")
+    plans.record_usage(owner, owner_id, SYMBOLIC_POINTS)
+    payload = {"status": "success", "solution": result, "verified": False,
+               "message": "Symbolic result requires numerical verification for the supplied conditions."}
+    payload["entitlement"] = {
+        "tier": entitlement["tier"],
+        "solves_used": entitlement["solves_used"] + 1,
+        "solves_per_day": entitlement["solves_per_day"],
+    }
+    return payload
 
 
 # Static assets for the interactive UI (must be registered after API routes).

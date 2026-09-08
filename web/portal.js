@@ -199,7 +199,8 @@ async function initPricingPage() {
     const card = el("div", "plan-card");
     card.appendChild(el("div", "plan-name", PLANG === "fa" ? plan.name_fa : plan.name_en));
     card.appendChild(el("div", "plan-desc", plan.description));
-    card.appendChild(el("div", "plan-price", fmtNum(plan.price_toman) + " <small>تومان / ماه</small>"));
+    const dur = plan.duration_days >= 360 ? "/ سال" : plan.duration_days >= 25 ? "/ ماه" : `/ ${plan.duration_days} روز`;
+    card.appendChild(el("div", "plan-price", fmtNum(plan.price_toman) + ` <small>تومان ${dur}</small>`));
     const list = el("ul", "plan-features");
     [
       `${fmtNum(plan.solves_per_day)} حل در روز`,

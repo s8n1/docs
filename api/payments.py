@@ -61,10 +61,16 @@ def update_order(order_id: int, **fields: Any) -> dict[str, Any]:
 
 
 def confirm_order(order_id: int, ref: str | None = None) -> dict[str, Any]:
-    """Mark an order paid and activate/extend the subscription."""
+    """Mark an order paid and activate/extend the subscription.
+
+    Only pending orders can be confirmed — confirming twice (e.g. a replayed
+    callback or a manual admin click) must not grant the plan again.
+    """
     order = db.query_one("SELECT * FROM payment_orders WHERE id = ?", (order_id,))
     if order is None:
         raise PaymentError("Order not found")
+    if order["status"] not in ("pending", "pending_confirm"):
+        raise PaymentError(f"Order is already {order['status']}")
     meta = json.loads(order["meta"] or "{}")
     if ref:
         meta["ref"] = ref
@@ -185,12 +191,14 @@ def crypto_start(order: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def crypto_submit_tx(order_id: int, txid: str) -> dict[str, Any]:
+def crypto_submit_tx(order_id: int, txid: str, user_id: int) -> dict[str, Any]:
     order = db.query_one("SELECT * FROM payment_orders WHERE id = ?", (order_id,))
     if order is None:
         raise PaymentError("Order not found")
     if order["gateway"] != "crypto":
         raise PaymentError("Not a crypto order")
+    if order["user_id"] != user_id:
+        raise PaymentError("Order does not belong to this account")
     if order["status"] not in ("pending", "pending_confirm"):
         raise PaymentError("Order is not awaiting payment")
     return update_order(order_id, status="pending_confirm", txid=txid)

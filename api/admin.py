@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api import db, payments, plans
@@ -83,16 +83,27 @@ def list_users(_: dict[str, Any] = Depends(require_admin)) -> list[dict[str, Any
 
 @router.patch("/users/{user_id}/role")
 def set_role(user_id: int, body: RoleBody,
-             _: dict[str, Any] = Depends(require_admin)) -> dict[str, Any]:
+             request: Request,
+             admin: dict[str, Any] = Depends(require_admin)) -> dict[str, Any]:
     if body.role not in ("user", "admin"):
         raise HTTPException(422, "Role must be 'user' or 'admin'")
+    if user_id == admin["id"]:
+        raise HTTPException(422, "You cannot change your own role")
+    if body.role == "user":
+        admins = db.query_one("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'")["c"]
+        target = db.query_one("SELECT role FROM users WHERE id = ?", (user_id,))
+        if admins <= 1 and target and target["role"] == "admin":
+            raise HTTPException(422, "Cannot demote the last admin")
     db.execute("UPDATE users SET role = ? WHERE id = ?", (body.role, user_id))
     return {"ok": True, "user_id": user_id, "role": body.role}
 
 
 @router.patch("/users/{user_id}/ban")
 def set_ban(user_id: int, body: BanBody,
-            _: dict[str, Any] = Depends(require_admin)) -> dict[str, Any]:
+            request: Request,
+            admin: dict[str, Any] = Depends(require_admin)) -> dict[str, Any]:
+    if user_id == admin["id"] and body.banned:
+        raise HTTPException(422, "You cannot ban your own account")
     db.execute("UPDATE users SET banned = ? WHERE id = ?", (1 if body.banned else 0, user_id))
     return {"ok": True, "user_id": user_id, "banned": body.banned}
 

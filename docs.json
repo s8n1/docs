@@ -20,7 +20,8 @@
               "quickstart",
               "development",
               "equations",
-              "solver-architecture"
+              "solver-architecture",
+              "platform"
             ]
           },
           {

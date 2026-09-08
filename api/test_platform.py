@@ -299,3 +299,98 @@ def test_my_orders_lists_user_orders():
     assert len(orders) == 1
     assert orders[0]["gateway"] == "crypto"
     assert orders[0]["status"] == "pending"
+
+
+# ---------------------------------------------------------------------------
+# Hardening regressions (symbolic gate, ownership, admin guards)
+# ---------------------------------------------------------------------------
+def test_symbolic_endpoint_is_gated_and_counts_toward_daily_limit():
+    _register("sym@example.com", "password22")
+    body = {"equation": "-y", "variable": "y", "independent": "t"}
+    for i in range(5):
+        res = client.post("/solve/symbolic", json=body)
+        assert res.status_code == 200
+        assert res.json()["entitlement"]["solves_used"] == i + 1
+    res = client.post("/solve/symbolic", json=body)
+    assert res.status_code == 402
+    assert res.json()["detail"]["code"] == "daily_limit"
+
+
+def test_symbolic_endpoint_requires_login_nothing():
+    # Guests are allowed but counted under their anonymous session quota.
+    client.post("/api/auth/logout", json={})
+    body = {"equation": "-y", "variable": "y", "independent": "t"}
+    res = client.post("/solve/symbolic", json=body)
+    assert res.status_code == 200
+    assert res.json()["entitlement"]["tier"] == "free"
+
+
+def test_crypto_tx_requires_order_ownership():
+    _register("alice@example.com", "password22")
+    client.post("/api/admin/settings", json={"key": "usdt_wallet", "value": "TXw"})
+    order = client.post("/api/payment/start", json={
+        "plan_slug": "pro_monthly", "gateway": "crypto"}).json()
+
+    mallory = TestClient(app)
+    mallory.post("/api/auth/register", json={
+        "name": "Mallory", "email": "mallory3@example.com", "password": "password22"})
+    res = mallory.post("/api/payment/crypto/tx", json={
+        "order_id": order["order_id"], "txid": "evilbeef1234"})
+    assert res.status_code == 422
+    assert "not belong" in res.json()["detail"]
+
+    # The owner can still submit.
+    tx = client.post("/api/payment/crypto/tx", json={
+        "order_id": order["order_id"], "txid": "deadbeef1234"})
+    assert tx.status_code == 200
+    assert tx.json()["status"] == "pending_confirm"
+
+
+def test_admin_cannot_self_demote_or_self_ban():
+    _register()  # first user = admin
+    me = client.get("/api/me").json()["user"]
+    assert me["role"] == "admin"
+
+    r = client.patch(f"/api/admin/users/{me['id']}/role", json={"role": "user"})
+    assert r.status_code == 422
+    b = client.patch(f"/api/admin/users/{me['id']}/ban", json={"banned": True})
+    assert b.status_code == 422
+
+    assert client.get("/api/me").json()["user"]["role"] == "admin"
+
+
+def test_role_change_allows_promotion_and_blocks_last_admin_demotion():
+    _register()
+    mallory = TestClient(app)
+    mallory.post("/api/auth/register", json={
+        "name": "Mallory", "email": "mallory4@example.com", "password": "password22"})
+    mid = mallory.get("/api/me").json()["user"]["id"]
+
+    assert client.patch(f"/api/admin/users/{mid}/role",
+                        json={"role": "admin"}).status_code == 200
+    users = client.get("/api/admin/users").json()
+    assert sum(1 for u in users if u["role"] == "admin") == 2
+
+    # With two admins, demoting one is allowed.
+    assert client.patch(f"/api/admin/users/{mid}/role",
+                        json={"role": "user"}).status_code == 200
+    users = client.get("/api/admin/users").json()
+    assert sum(1 for u in users if u["role"] == "admin") == 1
+
+
+def test_order_cannot_be_confirmed_twice():
+    _register("twice@example.com", "password22")
+    client.post("/api/admin/settings", json={"key": "usdt_wallet", "value": "TXw"})
+    order = client.post("/api/payment/start", json={
+        "plan_slug": "pro_monthly", "gateway": "crypto"}).json()
+    client.post("/api/payment/crypto/tx", json={
+        "order_id": order["order_id"], "txid": "deadbeef1234"})
+
+    assert client.post(f"/api/admin/orders/{order['order_id']}/confirm",
+                       json={}).status_code == 200
+    again = client.post(f"/api/admin/orders/{order['order_id']}/confirm", json={})
+    assert again.status_code == 422
+
+    subs = db.query("SELECT * FROM subscriptions WHERE user_id = "
+                    "(SELECT id FROM users WHERE email = 'twice@example.com')")
+    assert len(subs) == 1
