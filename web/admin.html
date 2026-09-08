@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>پنل مدیریت — DiffEQ Engine</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%E2%88%AB%3C/text%3E%3C/svg%3E" />
+</head>
+<body data-page="admin">
+  <header class="topbar" id="topbar"></header>
+  <main class="wrap">
+    <div id="page-error" class="banner banner-error hidden"></div>
+    <h1 class="page-title">پنل مدیریت</h1>
+    <nav class="tabs">
+      <button type="button" class="tab admin-tab" data-sec="stats">داشبورد</button>
+      <button type="button" class="tab admin-tab" data-sec="users">کاربران</button>
+      <button type="button" class="tab admin-tab" data-sec="orders">سفارش‌ها</button>
+      <button type="button" class="tab admin-tab" data-sec="settings">تنظیمات</button>
+    </nav>
+
+    <section id="sec-stats" class="panel">
+      <div class="card">
+        <h2>آمار کلی</h2>
+        <div class="res-grid" id="stats-grid"></div>
+      </div>
+    </section>
+
+    <section id="sec-users" class="panel hidden">
+      <div class="card">
+        <h2>کاربران و اشتراک‌ها</h2>
+        <div class="table-wrap">
+          <table class="portal-table">
+            <thead><tr><th>نام</th><th>ایمیل</th><th>نقش</th><th>اشتراک</th><th>اعطای اشتراک</th><th>مسدود</th></tr></thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-orders" class="panel hidden">
+      <div class="card">
+        <h2>سفارش‌های پرداخت</h2>
+        <div class="table-wrap">
+          <table class="portal-table">
+            <thead><tr><th>#</th><th>کاربر</th><th>پلن</th><th>درگاه</th><th>مبلغ</th><th>وضعیت</th><th>TXID</th><th></th></tr></thead>
+            <tbody id="orders-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-settings" class="panel hidden">
+      <div class="card">
+        <h2>تنظیمات سایت</h2>
+        <label class="field">
+          <span class="lbl">کیف پول USDT (TRC20)</span>
+          <input type="text" id="set-usdt" placeholder="Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+        </label>
+        <label class="field">
+          <span class="lbl">مدل‌های ویژه (JSON array از نام مدل‌ها)</span>
+          <input type="text" id="set-premium" />
+        </label>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="save-settings">ذخیره</button>
+          <span class="hint" id="settings-msg"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="/static/portal.js"></script>
+</body>
+</html>

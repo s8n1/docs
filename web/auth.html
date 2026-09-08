@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ورود / ثبت‌نام — DiffEQ Engine</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%E2%88%AB%3C/text%3E%3C/svg%3E" />
+</head>
+<body data-page="auth">
+  <header class="topbar" id="topbar"></header>
+  <main class="wrap narrow">
+    <div id="page-error" class="banner banner-error hidden"></div>
+    <div class="card">
+      <h2 id="auth-title">ورود به حساب</h2>
+      <div class="auth-tabs">
+        <button type="button" class="tab active" id="tab-login">ورود</button>
+        <button type="button" class="tab" id="tab-register">ثبت‌نام</button>
+      </div>
+      <form id="auth-form">
+        <label class="field" id="field-name">
+          <span class="lbl">نام</span>
+          <input type="text" id="in-name" autocomplete="name" />
+        </label>
+        <label class="field">
+          <span class="lbl">ایمیل</span>
+          <input type="email" id="in-email" autocomplete="email" required />
+        </label>
+        <label class="field">
+          <span class="lbl">رمز عبور (حداقل ۸ کاراکتر)</span>
+          <input type="password" id="in-password" autocomplete="current-password" required />
+        </label>
+        <div id="auth-error" class="banner banner-error hidden"></div>
+        <button type="submit" class="btn btn-primary" id="auth-submit">ورود</button>
+      </form>
+      <p class="hint">اولین کاربر ثبت‌نام‌شده، نقش مدیر (admin) می‌گیرد.</p>
+    </div>
+  </main>
+  <script src="/static/portal.js"></script>
+</body>
+</html>

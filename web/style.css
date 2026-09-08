@@ -183,3 +183,81 @@ html[dir="rtl"] .about { padding-left: 0; padding-right: 20px; }
 .foot { border-top: 1px solid var(--line); padding: 16px clamp(16px, 4vw, 48px); color: var(--ink-dim); font-size: 13px; }
 
 code.kbd { color: var(--accent2); }
+
+/* ============ Portal (auth / pricing / account / admin) ============ */
+.topbar { gap: 12px; }
+.auth-area { display: flex; align-items: center; gap: 8px; flex: none; }
+.btn-small { padding: 6px 12px; font-size: 12.5px; border-radius: 8px; }
+.user-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line2); background: var(--code-bg);
+  padding: 5px 10px; border-radius: 999px; font-size: 13px;
+}
+.user-name { color: var(--ink); font-weight: 600; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-badge {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.5px;
+  padding: 2px 8px; border-radius: 999px; font-family: var(--mono);
+}
+.plan-badge.pro { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #06121a; }
+.plan-badge.free { background: var(--panel2); color: var(--ink-dim); border: 1px solid var(--line2); }
+.upgrade-link { color: var(--accent); font-weight: 700; text-decoration: none; border-bottom: 1px dashed var(--accent); }
+.upgrade-link:hover { color: #7df2d2; }
+
+.wrap.narrow { max-width: 520px; }
+.page-title { font-size: 24px; margin: 8px 0 4px; }
+.auth-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+
+.portal-nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.portal-link {
+  color: var(--ink-dim); text-decoration: none; font-size: 13.5px; font-weight: 600;
+  padding: 6px 12px; border-radius: 8px;
+}
+.portal-link:hover { color: var(--ink); background: var(--panel2); }
+.portal-link.active { color: var(--accent); background: rgba(56, 225, 180, 0.08); }
+.portal-brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+.portal-brand-name { font-weight: 800; font-size: 16px; }
+
+.plans-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 14px; }
+.plan-card {
+  background: linear-gradient(180deg, var(--panel), var(--panel2));
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 20px; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.plan-name { font-size: 17px; font-weight: 800; color: var(--accent); }
+.plan-desc { font-size: 13px; color: var(--ink-dim); min-height: 34px; }
+.plan-price { font-size: 22px; font-weight: 800; font-family: var(--mono); }
+.plan-price small { font-size: 12px; color: var(--ink-dim); font-family: var(--sans); }
+.plan-features { margin: 4px 0; padding-right: 18px; color: var(--ink-dim); font-size: 13.5px; }
+html[dir="ltr"] .plan-features { padding-right: 0; padding-left: 18px; }
+.plan-features li { margin-bottom: 5px; }
+.plan-card .btn { margin-top: auto; }
+
+.modal {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(5, 8, 12, 0.78); backdrop-filter: blur(4px);
+  display: grid; place-items: center; padding: 18px;
+}
+.modal-box { width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; }
+.modal-close { position: fixed; top: 18px; left: 18px; }
+html[dir="rtl"] .modal-close { left: auto; right: 18px; }
+.gateway-btn { text-align: start; }
+.crypto-addr {
+  font-family: var(--mono); font-size: 12.5px; word-break: break-all;
+  background: var(--code-bg); border: 1px solid rgba(56, 225, 180, 0.35);
+  padding: 10px 12px; border-radius: 10px; color: #c9f7e8;
+}
+.err-text { color: var(--err); }
+
+.table-wrap { overflow-x: auto; }
+.portal-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.portal-table th, .portal-table td {
+  text-align: start; padding: 8px 10px; border-bottom: 1px solid var(--line);
+  white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+}
+.portal-table th { color: var(--ink-dim); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.4px; }
+.portal-table td .btn, .portal-table td select, .portal-table td input {
+  margin: 2px 4px 2px 0; width: auto; display: inline-block;
+}
+.portal-table td input[type="number"] { width: 70px; padding: 5px 7px; }
+.portal-table td select { padding: 5px 7px; }

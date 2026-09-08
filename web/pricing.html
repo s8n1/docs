@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>تعرفه‌ها — DiffEQ Engine</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%E2%88%AB%3C/text%3E%3C/svg%3E" />
+</head>
+<body data-page="pricing">
+  <header class="topbar" id="topbar"></header>
+  <main class="wrap">
+    <div id="page-error" class="banner banner-error hidden"></div>
+    <h1 class="page-title">تعرفه‌های اشتراک</h1>
+    <p class="hint">با پایان اعتبار اشتراک، حساب به‌صورت خودکار به پلن رایگان برمی‌گردد.</p>
+    <div class="plans-grid" id="plans-grid"></div>
+
+    <div class="card" style="margin-top:20px">
+      <h2>روش‌های پرداخت</h2>
+      <ul class="about">
+        <li>زرین‌پال — پرداخت کارت بانکی (تومان)</li>
+        <li>آیدی‌پی — درگاه بانکی (ریال)</li>
+        <li>USDT — انتقال مستقیم در شبکه TRC20 به کیف پول ادمین</li>
+      </ul>
+    </div>
+  </main>
+
+  <div class="modal hidden" id="pay-modal">
+    <div class="modal-box card" id="pay-modal-body"></div>
+    <button type="button" class="btn btn-small modal-close" id="pay-modal-close">بستن ✕</button>
+  </div>
+
+  <script src="/static/portal.js"></script>
+</body>
+</html>

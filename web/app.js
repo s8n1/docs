@@ -347,7 +347,10 @@ async function api(path, body) {
   try { data = await res.json(); } catch (_) { /* empty body */ }
   if (!res.ok) {
     const msg = (data && (data.detail || data.message)) || `HTTP ${res.status}`;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    const err = new Error(typeof msg === "string" ? msg : (msg && msg.message ? msg.message : JSON.stringify(msg)));
+    err.status = res.status;
+    err.detail = msg && typeof msg === "object" ? msg : null;
+    throw err;
   }
   return data;
 }
@@ -615,10 +618,75 @@ async function runSolve() {
     const data = await api("/solve", body);
     showResults(data, MODEL_DEFS[currentModel]);
   } catch (err) {
-    setBanner("error", `✗ ${err.message}`);
+    if (err.status === 402) {
+      showUpgrade(err.detail && err.detail.message ? err.detail.message : err.message);
+    } else {
+      setBanner("error", `✗ ${err.message}`);
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = tr("btn-solve");
+  }
+}
+
+function showUpgrade(message) {
+  const b = $("banner-error");
+  b.innerHTML = "";
+  b.appendChild(document.createTextNode("✗ " + message + "  "));
+  const link = document.createElement("a");
+  link.href = "/pricing";
+  link.className = "upgrade-link";
+  link.textContent = LANG === "fa" ? "مشاهده تعرفه‌ها ←" : "View plans →";
+  b.appendChild(link);
+  b.classList.remove("hidden");
+}
+
+async function initAuthArea() {
+  const slot = $("auth-area");
+  if (!slot) return;
+  let me = null;
+  try { me = await api("/api/me"); } catch (_) { /* offline */ }
+  slot.innerHTML = "";
+  if (me && me.user) {
+    const chip = document.createElement("span");
+    chip.className = "user-chip";
+    const badge = document.createElement("span");
+    badge.className = "plan-badge " + (me.entitlement.tier === "pro" ? "pro" : "free");
+    badge.textContent = me.entitlement.tier === "pro" ? "PRO" : "free";
+    const name = document.createElement("span");
+    name.className = "user-name";
+    name.textContent = me.user.name;
+    chip.append(badge, name);
+    const account = document.createElement("a");
+    account.href = "/account";
+    account.className = "btn btn-small";
+    account.textContent = LANG === "fa" ? "حساب" : "Account";
+    slot.append(chip, account);
+    if (me.user.role === "admin") {
+      const adminLink = document.createElement("a");
+      adminLink.href = "/admin";
+      adminLink.className = "btn btn-small btn-primary";
+      adminLink.textContent = "Admin";
+      slot.appendChild(adminLink);
+    }
+    const logout = document.createElement("button");
+    logout.className = "btn btn-small";
+    logout.textContent = LANG === "fa" ? "خروج" : "Log out";
+    logout.onclick = async () => {
+      await api("/api/auth/logout", {});
+      location.reload();
+    };
+    slot.appendChild(logout);
+  } else {
+    const pricing = document.createElement("a");
+    pricing.href = "/pricing";
+    pricing.className = "btn btn-small";
+    pricing.textContent = LANG === "fa" ? "تعرفه‌ها" : "Pricing";
+    const login = document.createElement("a");
+    login.href = "/auth";
+    login.className = "btn btn-small btn-primary";
+    login.textContent = LANG === "fa" ? "ورود / ثبت‌نام" : "Sign in";
+    slot.append(pricing, login);
   }
 }
 
@@ -698,6 +766,7 @@ function init() {
   modelNames = Object.keys(MODEL_DEFS);
   applyLang();
   healthCheck();
+  initAuthArea();
 }
 
 document.addEventListener("DOMContentLoaded", init);

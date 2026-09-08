@@ -139,6 +139,49 @@ The local solver and pattern classifier run independently in Python and do not r
 
 `POST /solve` uses local allowlisted adapters. `POST /analyze` uses the offline classifier and always works without credentials. `POST /analyze/enhanced` optionally calls an OpenAI-compatible provider and falls back to the local classifier on failure. The solver does not depend on AI or any external API to compute deterministic built-in models — the same guarantee is exercised directly by `python3 -m api.cli`.
 
+## Accounts, subscriptions & payments
+
+The product is a monetized web app on top of the solver engine:
+
+- **Accounts** — email/password sign-up and sign-in (PBKDF2-hashed), SQLite-backed
+  sessions in an HttpOnly cookie. The first registered user becomes the **admin**.
+- **Plans** — Free (5 solves/day, 500 points, premium models blocked) and Pro
+  (monthly/yearly, 100–1000 solves/day, up to 20 000 points, all models). When a
+  subscription lapses the account is **automatically restricted back to Free**
+  — enforced server-side on every `/solve` call, not just in the UI.
+- **Payment gateways** — ZarinPal (toman), IDPay (rial), and direct **USDT-TRC20**
+  wallet payments. Gateways are only called with real credentials configured via
+  environment variables; without them the endpoints return a clear 503 instead of
+  failing silently.
+- **Crypto flow** — the buyer sends USDT-TRC20 to the wallet address shown on the
+  pricing page, submits the TXID, and the admin confirms the payment from the
+  admin panel, which activates the subscription.
+- **Admin panel** (`/admin`) — dashboard stats (users, active subscriptions,
+  revenue by currency, solves today), user management (roles, ban, grant/extend
+  subscriptions), payment order review with crypto confirmation, and site
+  settings (USDT wallet address, premium-model block list).
+
+### Environment variables (secrets live in Settings → Environment, never in git)
+
+| Variable | Purpose | Required? |
+|---|---|---|
+| `ZARINPAL_MERCHANT_ID` | ZarinPal merchant id | only for ZarinPal payments |
+| `ZARINPAL_SANDBOX` | `1`/`true` to use the ZarinPal sandbox | optional |
+| `IDPAY_API_KEY` | IDPay API key | only for IDPay payments |
+| `IDPAY_SANDBOX` | `1`/`true` to send the IDPay sandbox header | optional |
+| `USDT_TRC20_WALLET` | Fallback USDT-TRC20 wallet (editable in admin settings) | only for crypto payments |
+| `ADMIN_EMAIL` | (future) designated admin email — currently the first registered user is admin | optional |
+| `DIFFEQ_DB` | Override the SQLite database path (default `data/app.db`) | optional |
+
+### Quick start for the full product
+
+```bash
+npm start                 # provisions deps and serves UI + API on 0.0.0.0:8000
+# open http://localhost:8000/auth      → register (first user becomes admin)
+# open http://localhost:8000/admin     → admin panel
+# open http://localhost:8000/pricing   → buy a plan (ZarinPal / IDPay / USDT-TRC20)
+```
+
 ## Required production configuration
 
 The solver API will require provider-specific values configured through the environment manager, not committed to this repository. No AI key is required for local classification or deterministic solving. `AI_API_KEY` or `SAMBANOVA_API_KEY` is optional and only enables enhanced natural-language interpretation. Database/queue configuration is required only for persistent, distributed production jobs; the local engine runs without them.
