@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from api import db, payments, plans, tokens
+from api import auth, db, payments, plans, tokens
 from api.main import app
 from api.solver_core import MODEL_NAMES
 
@@ -15,7 +15,9 @@ ADMIN_LOGIN = {"identifier": "admin", "password": "13811372"}
 def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     db.reset_db()
+    auth.reset_login_throttle()
     yield
+    auth.reset_login_throttle()
 
 
 def _client() -> TestClient:
@@ -619,3 +621,58 @@ def test_legacy_database_migrates_and_credits_time_based_subscribers():
     db.init_db()
     again = db.query_one("SELECT token_balance FROM users WHERE email = 'legacy@example.com'")
     assert again["token_balance"] == 500
+
+
+# ---------------------------------------------------------------------------
+# Privacy & access hardening
+# ---------------------------------------------------------------------------
+def test_login_throttle_stops_password_guessing():
+    c = _client()
+    for _ in range(auth.LOGIN_MAX_FAILURES):
+        res = c.post("/api/auth/login", json={"identifier": "admin", "password": "wrong"})
+        assert res.status_code == 401
+    # while the window is open even the correct password is refused
+    assert c.post("/api/auth/login", json=ADMIN_LOGIN).status_code == 429
+    auth.reset_login_throttle()
+    assert c.post("/api/auth/login", json=ADMIN_LOGIN).status_code == 200
+
+
+def test_every_admin_route_is_invisible_to_regular_users():
+    c, _ = _register()
+    for path in ("/api/admin/stats", "/api/admin/users", "/api/admin/orders",
+                 "/api/admin/tokens/ledger", "/api/admin/settings"):
+        assert c.get(path).status_code == 403, path
+    assert c.post("/api/admin/users/1/tokens", json={"delta": 5}).status_code == 403
+    assert c.post("/api/admin/settings",
+                  json={"key": "usdt_wallet", "value": "x"}).status_code == 403
+
+
+def test_accounts_only_ever_see_their_own_data():
+    a, ra = _register("a@example.com", username="alice")
+    b, rb = _register("b@example.com", username="bob")
+    assert ra.status_code == 200 and rb.status_code == 200
+    a.post("/solve", json=_solve_body())
+
+    a_reasons = [e["reason"] for e in a.get("/api/my-tokens").json()["entries"]]
+    b_reasons = [e["reason"] for e in b.get("/api/my-tokens").json()["entries"]]
+    assert "solve:logistic" in a_reasons
+    assert b_reasons == ["signup"]
+    assert b.get("/api/my-orders").json() == []
+
+
+def test_no_wildcard_cors_for_third_party_sites():
+    c, _ = _register()
+    res = c.get("/api/me", headers={"Origin": "https://evil.example"})
+    assert res.status_code == 200
+    assert res.headers.get("access-control-allow-origin") is None
+
+
+def test_session_cookie_flags():
+    c = _client()
+    cookie = c.post("/api/auth/login", json=ADMIN_LOGIN).headers["set-cookie"].lower()
+    assert "httponly" in cookie and "samesite=lax" in cookie
+    assert "secure" not in cookie  # plain-http test client stays usable
+
+    https = TestClient(app, base_url="https://testserver")
+    secure_cookie = https.post("/api/auth/login", json=ADMIN_LOGIN).headers["set-cookie"].lower()
+    assert "secure" in secure_cookie

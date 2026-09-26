@@ -7,3 +7,7 @@ __pycache__/
 data/
 *.db
 *.sqlite
+.env
+.env.*
+!.env.example
+*.tsbuildinfo

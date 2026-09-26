@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -30,15 +29,10 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 db.init_db()
 
-app = FastAPI(title="Differential Equation Intelligence API", version="0.4.0")
+app = FastAPI(title="Differential Equation Intelligence API", version="0.4.1")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# The UI is served by this same app, so no cross-origin access is granted on
+# purpose: a wildcard CORS policy would let any site script the API.
 app.include_router(admin.router)
 
 
@@ -157,10 +151,11 @@ def models() -> dict[str, object]:
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
-def _set_session_cookie(response: Response, token: str) -> None:
+def _set_session_cookie(response: Response, token: str, request: Request | None = None) -> None:
+    secure = bool(request is not None and request.url.scheme == "https")
     response.set_cookie(
         auth.SESSION_COOKIE, token, max_age=auth.SESSION_DAYS * 86400,
-        httponly=True, samesite="lax", path="/",
+        httponly=True, samesite="lax", path="/", secure=secure,
     )
 
 
@@ -172,7 +167,7 @@ def _login_identifier(body: LoginBody) -> str:
 
 
 @app.post("/api/auth/register")
-def register(body: RegisterBody, response: Response) -> dict[str, Any]:
+def register(body: RegisterBody, request: Request, response: Response) -> dict[str, Any]:
     email = body.email.strip().lower()
     if "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(422, "Invalid email address")
@@ -193,23 +188,30 @@ def register(body: RegisterBody, response: Response) -> dict[str, Any]:
     )
     tokens.grant("user", str(user_id), tokens.SIGNUP_TOKENS, "signup")
     token = auth.create_session(user_id)
-    _set_session_cookie(response, token)
+    _set_session_cookie(response, token, request)
     user = db.query_one(
         "SELECT id, username, email, name, role, banned FROM users WHERE id = ?", (user_id,))
     return {"user": user, "entitlement": plans.get_entitlement(user, None)}
 
 
 @app.post("/api/auth/login")
-def login(body: LoginBody, response: Response) -> dict[str, Any]:
+def login(body: LoginBody, request: Request, response: Response) -> dict[str, Any]:
     identifier = _login_identifier(body)
+    throttle_key = auth.login_key(identifier, request.client.host if request.client else None)
+    wait = auth.login_blocked(throttle_key)
+    if wait:
+        raise HTTPException(
+            429, f"Too many failed sign-in attempts — retry in {wait} seconds")
     row = db.query_one(
         "SELECT * FROM users WHERE email = ? OR username = ?", (identifier, identifier))
     if row is None or not auth.verify_password(body.password, row["password_hash"]):
+        auth.note_login_failure(throttle_key)
         raise HTTPException(401, "Invalid email/username or password")
     if row["banned"]:
         raise HTTPException(403, "Account is disabled")
+    auth.clear_login_failures(throttle_key)
     token = auth.create_session(row["id"])
-    _set_session_cookie(response, token)
+    _set_session_cookie(response, token, request)
     user = {k: row[k] for k in ("id", "username", "email", "name", "role", "banned")}
     return {"user": user, "entitlement": plans.get_entitlement(user, None)}
 

@@ -146,9 +146,11 @@ The product is a monetized web app on top of the solver engine:
 - **Accounts** — sign up and sign in with email **or username** (PBKDF2-hashed);
   there is no phone-number step anywhere. Sessions are SQLite-backed tokens in an
   HttpOnly cookie.
-- **Fixed admin** — the `admin` account (`13811372` unless `ADMIN_PASSWORD` is set)
-  is seeded idempotently on startup and signs in with username + password only.
-  It has unlimited token access and full control over every account.
+- **Fixed admin** — an admin account is seeded idempotently on startup from
+  `ADMIN_USERNAME` / `ADMIN_PASSWORD` (the defaults live in `api/db.py` and are
+  shown only in the operator's own environment, never in the docs). It signs in
+  with username + password only, gets unlimited token access, and has full
+  control over every account.
 - **Tokens, not time** — token packs never expire. Each pack credits tokens that
   are spent per operation by difficulty: 1 token for the elementary ODE families
   up to 9 for inverse problems, 4 for a symbolic solve, 1 for local
@@ -172,6 +174,25 @@ The product is a monetized web app on top of the solver engine:
   link), the token ledger, and site settings (USDT wallet address, per-model
   token prices).
 
+### Privacy & access control
+
+- Every `/api/admin/*` route answers `401` to anonymous visitors and `403` to
+  signed-in non-admins — project data (accounts, balances, orders, revenue) is
+  visible to the admin only. An account can only ever read its own user object,
+  token history, and orders.
+- Login is throttled in-process: after 8 failed attempts for the same
+  identifier + client host within 5 minutes the API answers `429` until the
+  window slides past, so the admin password cannot be guessed by brute force.
+  A successful login clears the counter.
+- Session cookies are `HttpOnly` and `SameSite=Lax`, and marked `Secure`
+  automatically when the request arrives over HTTPS.
+- No wildcard CORS: the API grants no cross-origin access, so third-party sites
+  cannot script it.
+- `.env`, `data/`, and `*.db` are git-ignored; the SQLite database is never
+  served by the app (only `web/` is mounted as static files).
+- Set `ADMIN_PASSWORD` (and optionally `ADMIN_USERNAME`) per deployment instead
+  of relying on the built-in default.
+
 ### Environment variables (secrets live in Settings → Environment, never in git)
 
 | Variable | Purpose | Required? |
@@ -183,7 +204,7 @@ The product is a monetized web app on top of the solver engine:
 | `ZARINPAL_CURRENCY` | `IRR` (default) or `IRT` — currency sent to ZarinPal | optional |
 | `USDT_TRC20_WALLET` | Fallback USDT-TRC20 wallet (editable in admin settings) | only for crypto payments |
 | `ADMIN_USERNAME` | Fixed admin username (default `admin`) | optional |
-| `ADMIN_PASSWORD` | Fixed admin password (default `13811372`) | optional |
+| `ADMIN_PASSWORD` | Admin password — set it per deployment instead of relying on the built-in default | recommended |
 | `ADMIN_EMAIL` | Fixed admin email (default `admin@diffeq.local`) | optional |
 | `DIFFEQ_DB` | Override the SQLite database path (default `data/app.db`) | optional |
 
@@ -191,7 +212,7 @@ The product is a monetized web app on top of the solver engine:
 
 ```bash
 npm start                 # provisions deps and serves UI + API on 0.0.0.0:8000
-# open http://localhost:8000/auth      → sign in as admin / 13811372 (username only)
+# open http://localhost:8000/auth      → sign in with the admin username + password (username only)
 # open http://localhost:8000/admin     → every account, token control, orders
 # open http://localhost:8000/pricing   → buy a token pack (ZarinPal / IDPay / USDT-TRC20)
 ```

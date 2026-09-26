@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -21,6 +22,53 @@ from api import db
 SESSION_COOKIE = "de_session"
 SESSION_DAYS = 30
 _PBKDF2_ITERATIONS = 200_000
+
+# In-process login throttle. Failed logins are counted per identifier + client
+# host; once LOGIN_MAX_FAILURES failures land inside LOGIN_WINDOW_SECONDS the
+# key is refused with 429 until the window slides past. Single-process uvicorn
+# keeps this in memory on purpose: no schema, no shared state, no surprises.
+LOGIN_MAX_FAILURES = 8
+LOGIN_WINDOW_SECONDS = 300
+_login_failures: dict[str, list[float]] = {}
+
+
+def login_key(identifier: str, host: str | None) -> str:
+    return f"{(identifier or '').strip().lower()}|{host or 'unknown'}"
+
+
+def _prune(key: str, now: float) -> list[float]:
+    kept = [t for t in _login_failures.get(key, []) if now - t < LOGIN_WINDOW_SECONDS]
+    if kept:
+        _login_failures[key] = kept
+    else:
+        _login_failures.pop(key, None)
+    return kept
+
+
+def login_blocked(key: str) -> int:
+    """Seconds the caller must wait, or 0 when the key may try again."""
+    now = time.monotonic()
+    recent = _prune(key, now)
+    if len(recent) < LOGIN_MAX_FAILURES:
+        return 0
+    oldest = min(recent)
+    return max(1, int(LOGIN_WINDOW_SECONDS - (now - oldest)))
+
+
+def note_login_failure(key: str) -> None:
+    now = time.monotonic()
+    recent = _prune(key, now)
+    recent.append(now)
+    _login_failures[key] = recent
+
+
+def clear_login_failures(key: str) -> None:
+    _login_failures.pop(key, None)
+
+
+def reset_login_throttle() -> None:
+    """Drop every counter (used by tests)."""
+    _login_failures.clear()
 
 
 def hash_password(password: str) -> str:
