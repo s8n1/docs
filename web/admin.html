@@ -16,6 +16,7 @@
       <button type="button" class="tab admin-tab" data-sec="stats">داشبورد</button>
       <button type="button" class="tab admin-tab" data-sec="users">کاربران</button>
       <button type="button" class="tab admin-tab" data-sec="orders">سفارش‌ها</button>
+      <button type="button" class="tab admin-tab" data-sec="ledger">گردش توکن</button>
       <button type="button" class="tab admin-tab" data-sec="settings">تنظیمات</button>
     </nav>
 
@@ -28,10 +29,10 @@
 
     <section id="sec-users" class="panel hidden">
       <div class="card">
-        <h2>کاربران و اشتراک‌ها</h2>
+        <h2>کاربران، موجودی توکن و دسترسی ادمین</h2>
         <div class="table-wrap">
           <table class="portal-table">
-            <thead><tr><th>نام</th><th>ایمیل</th><th>نقش</th><th>اشتراک</th><th>اعطای اشتراک</th><th>مسدود</th></tr></thead>
+            <thead><tr><th>#</th><th>کاربر</th><th>نقش</th><th>توکن</th><th>تغییر توکن</th><th>اعطای پک</th><th>مسدود</th></tr></thead>
             <tbody id="users-body"></tbody>
           </table>
         </div>
@@ -43,8 +44,20 @@
         <h2>سفارش‌های پرداخت</h2>
         <div class="table-wrap">
           <table class="portal-table">
-            <thead><tr><th>#</th><th>کاربر</th><th>پلن</th><th>درگاه</th><th>مبلغ</th><th>وضعیت</th><th>TXID</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>کاربر</th><th>پک</th><th>درگاه</th><th>مبلغ</th><th>وضعیت</th><th>TXID</th><th></th></tr></thead>
             <tbody id="orders-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-ledger" class="panel hidden">
+      <div class="card">
+        <h2>گردش توکن (آخرین ۱۰۰ حرکت)</h2>
+        <div class="table-wrap">
+          <table class="portal-table">
+            <thead><tr><th>#</th><th>کاربر</th><th>تغییر</th><th>دلیل</th><th>موجودی بعد</th><th>تاریخ</th></tr></thead>
+            <tbody id="ledger-body"></tbody>
           </table>
         </div>
       </div>
@@ -58,8 +71,8 @@
           <input type="text" id="set-usdt" placeholder="Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
         </label>
         <label class="field">
-          <span class="lbl">مدل‌های ویژه (JSON array از نام مدل‌ها)</span>
-          <input type="text" id="set-premium" />
+          <span class="lbl">قیمت توکنی مدل‌ها — JSON مثل {"laplace_pde": 10}</span>
+          <input type="text" id="set-costs" placeholder='{"logistic": 1}' />
         </label>
         <div class="actions">
           <button type="button" class="btn btn-primary" id="save-settings">ذخیره</button>

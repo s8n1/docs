@@ -33,7 +33,13 @@ const I18N = {
   about3: { en: "Finite-difference solvers for heat, wave, advection, Laplace and Poisson PDEs.", fa: "حل‌کننده‌های تفاضل محدود برای معادلات حرارت، موج، جابه‌جایی، لاپلاس و پواسون." },
   about4: { en: "Boundary value problems, Sturm–Liouville eigenvalues, delay equations, and inverse (curve-fit) problems.", fa: "مسائل مقدار مرزی، مقدارهای ویژهٔ استورم–لیوویل، معادلات تأخیری و مسائل معکوس." },
   about5: { en: "Every result carries a residual check and verification metadata. No user input is ever executed as code.", fa: "هر نتیجه با بررسی باقی‌مانده و فرادادهٔ اعتبارسنجی همراه است. هیچ ورودی کاربری هرگز به‌صورت کد اجرا نمی‌شود." },
+  about6: { en: "Token packs never expire: each tool and model costs tokens by difficulty, and your balance is shown in the header.", fa: "پک‌های توکن منقضی نمی‌شوند: هزینهٔ هر ابزار و مدل بر اساس سختی از توکن‌های شما کم می‌شود و موجودی در سربرگ نمایش داده می‌شود." },
   "connecting": { en: "Connecting to the solver API…", fa: "در حال اتصال به API حل‌کننده…" },
+  "cost-hint": { en: "Cost", fa: "هزینه" },
+  "tokens": { en: "tokens", fa: "توکن" },
+  "tokens-left": { en: "balance", fa: "موجودی" },
+  "upgrade-tokens": { en: "Not enough tokens — top up to continue.", fa: "توکن کافی نیست — برای ادامه حساب خود را شارژ کنید." },
+  "view-plans": { en: "View packs →", fa: "مشاهدهٔ پک‌ها ←" },
   "api-down": { en: "Solver API unreachable. Start it with: npm run api (port 8000).", fa: "API حل‌کننده در دسترس نیست. با دستور npm run api آن را اجرا کنید." },
   "free-sym-empty": { en: "Enter an equation first.", fa: "ابتدا یک معادله وارد کنید." },
   "free-class-title": { en: "Local classification", fa: "تشخیص محلی" },
@@ -141,8 +147,16 @@ const el = (tag, cls, text) => {
 
 let currentModel = "logistic";
 let modelNames = Object.keys(MODEL_DEFS);
+let TOKEN_COSTS = {};
+let MY_ENTITLEMENT = null;
 let exampleIdx = 0;
 const EXAMPLE_CYCLE = ["logistic", "van_der_pol", "lorenz", "pendulum", "heat_equation", "eigenvalue", "boundary_value", "inverse_problem"];
+
+function fmtInt(n) {
+  if (n === null || n === undefined) return "∞";
+  try { return Number(n).toLocaleString(LANG === "fa" ? "fa-IR" : "en-US"); }
+  catch (_) { return String(n); }
+}
 
 function fmt(x, digits = 5) {
   if (x === null || x === undefined) return "—";
@@ -177,7 +191,8 @@ function buildModelOptions() {
       const d = MODEL_DEFS[n];
       const o = el("option");
       o.value = n;
-      o.textContent = `${LANG === "fa" ? d.fa : d.en}  (${n})`;
+      const cost = TOKEN_COSTS[n];
+      o.textContent = `${LANG === "fa" ? d.fa : d.en}  (${n})${cost ? ` — ${cost} ${tr("tokens")}` : ""}`;
       group.appendChild(o);
     }
     sel.appendChild(group);
@@ -269,12 +284,36 @@ function describeModel(def) {
   const code = el("code");
   code.textContent = currentModel;
   box.appendChild(code);
+  const cost = TOKEN_COSTS[currentModel];
+  if (cost) {
+    const c = el("span");
+    c.textContent = ` · ${tr("cost-hint")}: ${cost} ${tr("tokens")}`;
+    box.appendChild(c);
+  }
+}
+
+function currentCost() {
+  const base = TOKEN_COSTS[currentModel] || 2;
+  const points = Math.min(2000, Math.max(2, Math.round(readNum($("p-points"), 200))));
+  return base + Math.max(0, Math.floor((points - 500) / 1000));
+}
+
+function updateCostHint() {
+  const box = $("cost-hint");
+  if (!box) return;
+  let text = `${tr("cost-hint")}: ${currentCost()} ${tr("tokens")}`;
+  if (MY_ENTITLEMENT) {
+    const balance = MY_ENTITLEMENT.unlimited ? null : MY_ENTITLEMENT.tokens;
+    text += ` · ${tr("tokens-left")}: ${balance === null ? "∞" : fmtInt(balance)}`;
+  }
+  box.textContent = text;
 }
 
 function selectModel(name) {
   if (!MODEL_DEFS[name]) return;
   currentModel = name;
   buildConfigUI();
+  updateCostHint();
 }
 
 function readConfig() {
@@ -617,9 +656,10 @@ async function runSolve() {
     const body = readConfig();
     const data = await api("/solve", body);
     showResults(data, MODEL_DEFS[currentModel]);
+    initAuthArea();
   } catch (err) {
     if (err.status === 402) {
-      showUpgrade(err.detail && err.detail.message ? err.detail.message : err.message);
+      showUpgrade(err.detail || err.message);
     } else {
       setBanner("error", `✗ ${err.message}`);
     }
@@ -629,16 +669,32 @@ async function runSolve() {
   }
 }
 
-function showUpgrade(message) {
+function showUpgrade(detail) {
+  const d = detail && typeof detail === "object" ? detail : null;
+  const code = d && d.code;
+  const msg = code === "insufficient_tokens"
+    ? tr("upgrade-tokens")
+    : ((d && d.message) || String(detail || ""));
   const b = $("banner-error");
   b.innerHTML = "";
-  b.appendChild(document.createTextNode("✗ " + message + "  "));
+  b.appendChild(document.createTextNode("✗ " + msg + "  "));
   const link = document.createElement("a");
   link.href = "/pricing";
   link.className = "upgrade-link";
-  link.textContent = LANG === "fa" ? "مشاهده تعرفه‌ها ←" : "View plans →";
+  link.textContent = tr("view-plans");
   b.appendChild(link);
   b.classList.remove("hidden");
+}
+
+async function loadCosts() {
+  try {
+    const data = await api("/models");
+    TOKEN_COSTS = data.token_costs || {};
+    const keep = $("model-select").value;
+    buildModelOptions();
+    if (keep) $("model-select").value = keep;
+    updateCostHint();
+  } catch (_) { /* costs are not critical */ }
 }
 
 async function initAuthArea() {
@@ -646,13 +702,16 @@ async function initAuthArea() {
   if (!slot) return;
   let me = null;
   try { me = await api("/api/me"); } catch (_) { /* offline */ }
+  MY_ENTITLEMENT = me && me.entitlement ? me.entitlement : null;
   slot.innerHTML = "";
   if (me && me.user) {
     const chip = document.createElement("span");
     chip.className = "user-chip";
     const badge = document.createElement("span");
-    badge.className = "plan-badge " + (me.entitlement.tier === "pro" ? "pro" : "free");
-    badge.textContent = me.entitlement.tier === "pro" ? "PRO" : "free";
+    const ent = me.entitlement;
+    badge.className = "plan-badge " + (ent.unlimited ? "admin" : (ent.tokens > 0 ? "pro" : "free"));
+    badge.textContent = ent.unlimited ? "∞" : `${fmtInt(ent.tokens)} ${tr("tokens")}`;
+    badge.title = tr("tokens-left");
     const name = document.createElement("span");
     name.className = "user-name";
     name.textContent = me.user.name;
@@ -662,6 +721,7 @@ async function initAuthArea() {
     account.className = "btn btn-small";
     account.textContent = LANG === "fa" ? "حساب" : "Account";
     slot.append(chip, account);
+    updateCostHint();
     if (me.user.role === "admin") {
       const adminLink = document.createElement("a");
       adminLink.href = "/admin";
@@ -687,6 +747,7 @@ async function initAuthArea() {
     login.className = "btn btn-small btn-primary";
     login.textContent = LANG === "fa" ? "ورود / ثبت‌نام" : "Sign in";
     slot.append(pricing, login);
+    updateCostHint();
   }
 }
 
@@ -734,9 +795,11 @@ function init() {
       const data = await symbolicFree(eq, $("free-dep").value.trim() || "y", $("free-ind").value.trim() || "t");
       renderFreeResult([[tr("sol-symbolic"), data.solution, true]]);
     } catch (err) {
-      setBanner("error", `✗ ${err.message}`);
+      if (err.status === 402) showUpgrade(err.detail || err.message);
+      else setBanner("error", `✗ ${err.message}`);
     } finally {
       btn.disabled = false;
+      initAuthArea();
     }
   });
 
@@ -757,14 +820,18 @@ function init() {
       ];
       renderFreeResult(lines);
     } catch (err) {
-      setBanner("error", `✗ ${err.message}`);
+      if (err.status === 402) showUpgrade(err.detail || err.message);
+      else setBanner("error", `✗ ${err.message}`);
     } finally {
       btn.disabled = false;
+      initAuthArea();
     }
   });
 
+  $("p-points").addEventListener("input", updateCostHint);
   modelNames = Object.keys(MODEL_DEFS);
   applyLang();
+  loadCosts();
   healthCheck();
   initAuthArea();
 }

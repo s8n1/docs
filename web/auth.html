@@ -22,9 +22,13 @@
           <span class="lbl">نام</span>
           <input type="text" id="in-name" autocomplete="name" />
         </label>
+        <label class="field" id="field-username">
+          <span class="lbl">نام کاربری (اختیاری)</span>
+          <input type="text" id="in-username" autocomplete="username" placeholder="a-z, 0-9, . _ -" />
+        </label>
         <label class="field">
-          <span class="lbl">ایمیل</span>
-          <input type="email" id="in-email" autocomplete="email" required />
+          <span class="lbl" id="in-identifier-label">ایمیل یا نام کاربری</span>
+          <input type="text" id="in-identifier" autocomplete="username" required />
         </label>
         <label class="field">
           <span class="lbl">رمز عبور (حداقل ۸ کاراکتر)</span>
@@ -33,7 +37,7 @@
         <div id="auth-error" class="banner banner-error hidden"></div>
         <button type="submit" class="btn btn-primary" id="auth-submit">ورود</button>
       </form>
-      <p class="hint">اولین کاربر ثبت‌نام‌شده، نقش مدیر (admin) می‌گیرد.</p>
+      <p class="hint">بدون شماره تلفن — فقط ایمیل یا نام کاربری و رمز عبور. هر حساب جدید ۵۰ توکن هدیه می‌گیرد.</p>
     </div>
   </main>
   <script src="/static/portal.js"></script>

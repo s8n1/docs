@@ -139,27 +139,38 @@ The local solver and pattern classifier run independently in Python and do not r
 
 `POST /solve` uses local allowlisted adapters. `POST /analyze` uses the offline classifier and always works without credentials. `POST /analyze/enhanced` optionally calls an OpenAI-compatible provider and falls back to the local classifier on failure. The solver does not depend on AI or any external API to compute deterministic built-in models — the same guarantee is exercised directly by `python3 -m api.cli`.
 
-## Accounts, subscriptions & payments
+## Accounts, tokens & payments
 
 The product is a monetized web app on top of the solver engine:
 
-- **Accounts** — email/password sign-up and sign-in (PBKDF2-hashed), SQLite-backed
-  sessions in an HttpOnly cookie. The first registered user becomes the **admin**.
-- **Plans** — Free (5 solves/day, 500 points, premium models blocked) and Pro
-  (monthly/yearly, 100–1000 solves/day, up to 20 000 points, all models). When a
-  subscription lapses the account is **automatically restricted back to Free**
-  — enforced server-side on every `/solve` call, not just in the UI.
-- **Payment gateways** — ZarinPal (toman), IDPay (rial), and direct **USDT-TRC20**
-  wallet payments. Gateways are only called with real credentials configured via
+- **Accounts** — sign up and sign in with email **or username** (PBKDF2-hashed);
+  there is no phone-number step anywhere. Sessions are SQLite-backed tokens in an
+  HttpOnly cookie.
+- **Fixed admin** — the `admin` account (`13811372` unless `ADMIN_PASSWORD` is set)
+  is seeded idempotently on startup and signs in with username + password only.
+  It has unlimited token access and full control over every account.
+- **Tokens, not time** — token packs never expire. Each pack credits tokens that
+  are spent per operation by difficulty: 1 token for the elementary ODE families
+  up to 9 for inverse problems, 4 for a symbolic solve, 1 for local
+  classification. Beyond the included 500 output points, each extra 1000 points
+  costs 1 more token. New accounts get 50 signup tokens; anonymous visitors get a
+  20-token trial session.
+- **Enforcement** — every gated call checks the balance server-side and returns
+  HTTP `402` with `code: insufficient_tokens` and `upgrade_url: /pricing` when the
+  balance cannot cover the operation. Admin accounts are unlimited.
+- **Payment gateways** — ZarinPal (toman; sent as Rial/`IRR` by default, override
+  with `ZARINPAL_CURRENCY=IRT`), IDPay (rial), and direct **USDT-TRC20** wallet
+  payments. Gateways are only called with real credentials configured via
   environment variables; without them the endpoints return a clear 503 instead of
   failing silently.
 - **Crypto flow** — the buyer sends USDT-TRC20 to the wallet address shown on the
   pricing page, submits the TXID, and the admin confirms the payment from the
-  admin panel, which activates the subscription.
-- **Admin panel** (`/admin`) — dashboard stats (users, active subscriptions,
-  revenue by currency, solves today), user management (roles, ban, grant/extend
-  subscriptions), payment order review with crypto confirmation, and site
-  settings (USDT wallet address, premium-model block list).
+  admin panel, which credits the pack's tokens (an order can be confirmed once).
+- **Admin panel** (`/admin`) — dashboard stats (users, tokens outstanding/sold/
+  spent, revenue by currency, pending orders), token adjustment and pack grants
+  for **any** account, payment order review with crypto confirmation (Tronscan
+  link), the token ledger, and site settings (USDT wallet address, per-model
+  token prices).
 
 ### Environment variables (secrets live in Settings → Environment, never in git)
 
@@ -169,17 +180,20 @@ The product is a monetized web app on top of the solver engine:
 | `ZARINPAL_SANDBOX` | `1`/`true` to use the ZarinPal sandbox | optional |
 | `IDPAY_API_KEY` | IDPay API key | only for IDPay payments |
 | `IDPAY_SANDBOX` | `1`/`true` to send the IDPay sandbox header | optional |
+| `ZARINPAL_CURRENCY` | `IRR` (default) or `IRT` — currency sent to ZarinPal | optional |
 | `USDT_TRC20_WALLET` | Fallback USDT-TRC20 wallet (editable in admin settings) | only for crypto payments |
-| `ADMIN_EMAIL` | (future) designated admin email — currently the first registered user is admin | optional |
+| `ADMIN_USERNAME` | Fixed admin username (default `admin`) | optional |
+| `ADMIN_PASSWORD` | Fixed admin password (default `13811372`) | optional |
+| `ADMIN_EMAIL` | Fixed admin email (default `admin@diffeq.local`) | optional |
 | `DIFFEQ_DB` | Override the SQLite database path (default `data/app.db`) | optional |
 
 ### Quick start for the full product
 
 ```bash
 npm start                 # provisions deps and serves UI + API on 0.0.0.0:8000
-# open http://localhost:8000/auth      → register (first user becomes admin)
-# open http://localhost:8000/admin     → admin panel
-# open http://localhost:8000/pricing   → buy a plan (ZarinPal / IDPay / USDT-TRC20)
+# open http://localhost:8000/auth      → sign in as admin / 13811372 (username only)
+# open http://localhost:8000/admin     → every account, token control, orders
+# open http://localhost:8000/pricing   → buy a token pack (ZarinPal / IDPay / USDT-TRC20)
 ```
 
 ## Required production configuration

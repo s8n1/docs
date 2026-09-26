@@ -2,7 +2,9 @@
 
 - Passwords are hashed with PBKDF2-HMAC-SHA256 (200k iterations, random salt).
 - Sessions are opaque random tokens stored in an HttpOnly cookie.
-- The first registered user becomes the admin (role='admin').
+- Accounts sign in with email **or username**; there is no phone-number step.
+- The fixed administrator (`admin` / `13811372` by default) is seeded by
+  `db.init_db()` and can log in with just its username and password.
 """
 from __future__ import annotations
 
@@ -40,13 +42,14 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-def create_session(user_id: int | None) -> str:
+def create_session(user_id: int | None, initial_tokens: int = 0) -> str:
     token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
     db.execute(
-        "INSERT INTO sessions (token, user_id, created_at, expires_at, last_seen) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (token, user_id, now.isoformat(timespec="seconds"),
+        "INSERT INTO sessions (token, user_id, tokens, created_at, expires_at, last_seen) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (token, user_id, max(int(initial_tokens), 0),
+         now.isoformat(timespec="seconds"),
          (now + timedelta(days=SESSION_DAYS)).isoformat(timespec="seconds"),
          now.isoformat(timespec="seconds")),
     )
@@ -63,8 +66,8 @@ def current(request: Request) -> tuple[dict[str, Any] | None, dict[str, Any] | N
     if not token:
         return None, None
     row = db.query_one(
-        """SELECT s.token, s.user_id, s.expires_at, u.id AS uid, u.email, u.name,
-                  u.role, u.banned
+        """SELECT s.token, s.user_id, s.expires_at, u.id AS uid, u.username, u.email,
+                  u.name, u.role, u.banned
            FROM sessions s LEFT JOIN users u ON u.id = s.user_id
            WHERE s.token = ?""",
         (token,),
@@ -82,8 +85,8 @@ def current(request: Request) -> tuple[dict[str, Any] | None, dict[str, Any] | N
     if row["uid"] is None:
         return None, session
     user = {
-        "id": row["uid"], "email": row["email"], "name": row["name"],
-        "role": row["role"], "banned": bool(row["banned"]),
+        "id": row["uid"], "username": row["username"], "email": row["email"],
+        "name": row["name"], "role": row["role"], "banned": bool(row["banned"]),
     }
     return user, session
 
@@ -107,4 +110,4 @@ def require_admin(request: Request) -> dict[str, Any]:
 def public_user(user: dict[str, Any] | None) -> dict[str, Any] | None:
     if user is None:
         return None
-    return {k: user[k] for k in ("id", "email", "name", "role", "banned")}
+    return {k: user[k] for k in ("id", "username", "email", "name", "role", "banned")}

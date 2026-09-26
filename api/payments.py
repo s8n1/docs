@@ -1,7 +1,8 @@
 """Payment gateways: ZarinPal, IDPay, and direct USDT (TRC20) wallet.
 
 Orders are persisted in SQLite; callbacks verify with the gateway and only
-then activate the subscription. Crypto payments are address-based: the user
+then credit the pack's tokens to the buyer's wallet (tokens never expire, so
+no subscription time is involved). Crypto payments are address-based: the user
 sends USDT-TRC20 to the configured wallet and submits a TXID, which the admin
 confirms — no third-party crypto processor required.
 """
@@ -13,8 +14,8 @@ from typing import Any
 
 import httpx
 
-from api import db
-from api.plans import get_plan, grant_subscription
+from api import db, tokens
+from api.plans import get_plan
 
 GATEWAYS = ("zarinpal", "idpay", "crypto")
 
@@ -61,23 +62,30 @@ def update_order(order_id: int, **fields: Any) -> dict[str, Any]:
 
 
 def confirm_order(order_id: int, ref: str | None = None) -> dict[str, Any]:
-    """Mark an order paid and activate/extend the subscription.
+    """Mark an order paid and credit the pack's tokens to the buyer.
 
     Only pending orders can be confirmed — confirming twice (e.g. a replayed
-    callback or a manual admin click) must not grant the plan again.
+    callback or a manual admin click) must not credit the tokens again.
     """
     order = db.query_one("SELECT * FROM payment_orders WHERE id = ?", (order_id,))
     if order is None:
         raise PaymentError("Order not found")
     if order["status"] not in ("pending", "pending_confirm"):
         raise PaymentError(f"Order is already {order['status']}")
+    plan = get_plan(order["plan_slug"])
+    if plan is None:
+        raise PaymentError(f"Plan '{order['plan_slug']}' no longer exists")
+    credited = int(plan["tokens"])
     meta = json.loads(order["meta"] or "{}")
     if ref:
         meta["ref"] = ref
+    meta["tokens"] = credited
     order = update_order(order_id, status="paid", meta=json.dumps(meta))
-    if order["user_id"] is not None:
-        grant_subscription(order["user_id"], order["plan_slug"],
-                           source=f"payment:{order['gateway']}", order_id=order_id)
+    if order["user_id"] is not None and credited > 0:
+        tokens.grant(
+            "user", str(order["user_id"]), credited,
+            f"payment:{order['gateway']}:{order['plan_slug']}",
+        )
     return order
 
 
@@ -91,16 +99,31 @@ def _zarinpal_base() -> tuple[str, str]:
     return "https://payment.zarinpal.com/pg/v4", "https://payment.zarinpal.com/pg/StartPay/"
 
 
+def _zarinpal_amount(amount: float) -> tuple[int, str]:
+    """ZarinPal v4 amount + currency. Prices are stored in Toman (IRT).
+
+    The default is IRR (Rial) because ZarinPal's verify endpoint documents
+    Rial amounts; set ZARINPAL_CURRENCY=IRT to send Toman directly.
+    """
+    currency = (os.environ.get("ZARINPAL_CURRENCY", "IRR") or "IRR").strip().upper()
+    if currency == "IRT":
+        return int(amount), "IRT"
+    return int(amount) * 10, "IRR"
+
+
 def zarinpal_request(order: dict[str, Any], callback_url: str) -> tuple[str, str]:
     merchant = os.environ.get("ZARINPAL_MERCHANT_ID", "")
     if not merchant:
         raise PaymentError("ZARINPAL_MERCHANT_ID is not configured")
     base, start = _zarinpal_base()
+    amount, currency = _zarinpal_amount(order["amount"])
     body = {
         "merchant_id": merchant,
-        "amount": int(order["amount"]),
+        "amount": amount,
+        "currency": currency,
         "callback_url": callback_url,
-        "description": f"DiffEQ subscription — plan {order['plan_slug']}",
+        "description": f"DiffEQ tokens — pack {order['plan_slug']}",
+        "metadata": {"order_id": str(order["id"])},
     }
     with httpx.Client(timeout=25) as client:
         resp = client.post(f"{base}/payment/request.json", json=body)
@@ -115,14 +138,20 @@ def zarinpal_request(order: dict[str, Any], callback_url: str) -> tuple[str, str
 
 def zarinpal_verify(order: dict[str, Any], authority: str) -> tuple[bool, dict[str, Any]]:
     merchant = os.environ.get("ZARINPAL_MERCHANT_ID", "")
+    if not merchant:
+        raise PaymentError("ZARINPAL_MERCHANT_ID is not configured")
     base, _ = _zarinpal_base()
-    body = {"merchant_id": merchant, "amount": int(order["amount"]), "authority": authority}
+    amount, _currency = _zarinpal_amount(order["amount"])
+    body = {"merchant_id": merchant, "amount": amount, "authority": authority}
     with httpx.Client(timeout=25) as client:
         resp = client.post(f"{base}/payment/verify.json", json=body)
         data = resp.json()
     data_block = data.get("data", {}) or {}
-    if data_block.get("code") == 100:
-        return True, {"ref_id": data_block.get("ref_id"), "raw": data}
+    code = data_block.get("code")
+    # 100 = verified now, 101 = already verified (never credits twice: the
+    # order status guard inside confirm_order rejects replays).
+    if code in (100, 101):
+        return True, {"ref_id": data_block.get("ref_id"), "code": code, "raw": data}
     return False, data_block
 
 
@@ -178,6 +207,7 @@ def crypto_start(order: dict[str, Any]) -> dict[str, Any]:
     wallet = db.get_setting("usdt_wallet", "") or os.environ.get("USDT_TRC20_WALLET", "")
     if not wallet:
         raise PaymentError("USDT wallet is not configured")
+    plan = get_plan(order["plan_slug"])
     meta = json.loads(order["meta"] or "{}")
     meta["wallet"] = wallet
     meta["network"] = "TRC20"
@@ -188,6 +218,8 @@ def crypto_start(order: dict[str, Any]) -> dict[str, Any]:
         "amount_usdt": order["amount"],
         "wallet": wallet,
         "network": "TRC20",
+        "tokens": int(plan["tokens"]) if plan else 0,
+        "explorer": "https://tronscan.org/#/transaction/",
     }
 
 

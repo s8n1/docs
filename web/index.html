@@ -104,7 +104,9 @@
           <div class="actions">
             <button type="button" class="btn btn-primary" id="btn-solve">⚡ Solve</button>
             <button type="button" class="btn" id="btn-example">Try an example</button>
+            <a class="btn btn-small" href="/pricing">Token packs</a>
           </div>
+          <div class="hint" id="cost-hint"></div>
         </div>
       </div>
 
@@ -115,7 +117,7 @@
         </div>
         <div id="res-symbolic" class="symbolic hidden"></div>
         <div id="res-eigen" class="eigen hidden"></div>
-        <div class="plot-wrap hidden"><canvas id="plot" width="900" height="380"></canvas><div id="plot-legend" class="legend"></div></div>
+        <div class="plot-wrap hidden" id="plot-wrap"><canvas id="plot" width="900" height="380"></canvas><div id="plot-legend" class="legend"></div></div>
         <div class="res-grid" id="res-grid"></div>
         <div class="meta">
           <h3 data-i18n="meta-title">Solver metadata</h3>
@@ -158,6 +160,7 @@
           <li data-i18n="about3">Finite-difference solvers for heat, wave, advection, Laplace and Poisson PDEs.</li>
           <li data-i18n="about4">Boundary value problems, Sturm–Liouville eigenvalues, delay equations, and inverse (curve-fit) problems.</li>
           <li data-i18n="about5">Every result carries a residual check and verification metadata. No user input is ever executed as code.</li>
+          <li data-i18n="about6">Token packs never expire: each tool and model costs tokens by difficulty, and your balance is shown in the header.</li>
         </ul>
       </div>
     </section>

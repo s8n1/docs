@@ -1,12 +1,17 @@
-"""DiffEQ Engine — solver API + subscriptions, payments, and admin.
+"""DiffEQ Engine — solver API + token packs, payments, and admin.
 
 Run with:  uvicorn api.main:app --host 0.0.0.0 --port 8000   (or: npm run api)
 Open http://localhost:8000/ for the bilingual interactive solver.
+
+Accounts: email/username + password only (no phone number anywhere). The
+fixed administrator is seeded by `db.init_db()` and logs in with username
+`admin` (password `13811372` unless ADMIN_PASSWORD is set). Solving costs
+tokens from the caller's balance according to the difficulty of the model.
 """
 from __future__ import annotations
 
-import json
 import math
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -16,7 +21,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from api import admin, auth, db, payments, plans
+from api import admin, auth, db, payments, plans, tokens
 from api.ai_provider import AIProviderError, analyze_equation
 from api.local_intelligence import classify_equation
 from api.solver_core import MODEL_NAMES, STIFF_MODELS, SolverRequest, adapter_metadata, solve_builtin, try_symbolic_first_order
@@ -25,7 +30,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 db.init_db()
 
-app = FastAPI(title="Differential Equation Intelligence API", version="0.3.0")
+app = FastAPI(title="Differential Equation Intelligence API", version="0.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,11 +80,14 @@ class RegisterBody(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=8, max_length=256)
+    username: str | None = Field(default=None, max_length=32)
 
 
 class LoginBody(BaseModel):
-    email: str
-    password: str
+    password: str = Field(min_length=1, max_length=256)
+    identifier: str | None = None   # email or username
+    email: str | None = None        # legacy field name
+    username: str | None = None
 
 
 class PaymentStartBody(BaseModel):
@@ -92,7 +100,7 @@ class CryptoTxBody(BaseModel):
     txid: str = Field(min_length=4, max_length=200)
 
 
-SYMBOLIC_POINTS = 10
+_USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{2,31}$")
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +145,13 @@ def health() -> dict[str, object]:
 
 @app.get("/models")
 def models() -> dict[str, object]:
-    return {"count": len(MODEL_NAMES), "models": MODEL_NAMES, "adapters": adapter_metadata()}
+    return {
+        "count": len(MODEL_NAMES),
+        "models": MODEL_NAMES,
+        "adapters": adapter_metadata(),
+        "token_costs": tokens.model_costs(),
+        "tool_costs": tokens.TOOL_COSTS,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +164,13 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+def _login_identifier(body: LoginBody) -> str:
+    for value in (body.identifier, body.email, body.username):
+        if value and value.strip():
+            return value.strip().lower()
+    raise HTTPException(422, "Email or username is required")
+
+
 @app.post("/api/auth/register")
 def register(body: RegisterBody, response: Response) -> dict[str, Any]:
     email = body.email.strip().lower()
@@ -157,29 +178,39 @@ def register(body: RegisterBody, response: Response) -> dict[str, Any]:
         raise HTTPException(422, "Invalid email address")
     if db.query_one("SELECT id FROM users WHERE email = ?", (email,)):
         raise HTTPException(409, "An account with this email already exists")
-    count = db.query_one("SELECT COUNT(*) AS c FROM users")["c"]
-    role = "admin" if count == 0 else "user"
+    username = None
+    if body.username and body.username.strip():
+        username = body.username.strip().lower()
+        if not _USERNAME_RE.match(username):
+            raise HTTPException(
+                422, "Username must be 3-32 characters: a-z, 0-9, dot, dash, underscore")
+        if db.query_one("SELECT id FROM users WHERE username = ?", (username,)):
+            raise HTTPException(409, "This username is already taken")
     user_id = db.execute(
-        "INSERT INTO users (email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)",
-        (email, body.name.strip(), auth.hash_password(body.password), role, db.utcnow()),
+        "INSERT INTO users (username, email, name, password_hash, role, created_at) "
+        "VALUES (?, ?, ?, ?, 'user', ?)",
+        (username, email, body.name.strip(), auth.hash_password(body.password), db.utcnow()),
     )
+    tokens.grant("user", str(user_id), tokens.SIGNUP_TOKENS, "signup")
     token = auth.create_session(user_id)
     _set_session_cookie(response, token)
-    user = db.query_one("SELECT id, email, name, role, banned FROM users WHERE id = ?", (user_id,))
+    user = db.query_one(
+        "SELECT id, username, email, name, role, banned FROM users WHERE id = ?", (user_id,))
     return {"user": user, "entitlement": plans.get_entitlement(user, None)}
 
 
 @app.post("/api/auth/login")
 def login(body: LoginBody, response: Response) -> dict[str, Any]:
-    email = body.email.strip().lower()
-    row = db.query_one("SELECT * FROM users WHERE email = ?", (email,))
+    identifier = _login_identifier(body)
+    row = db.query_one(
+        "SELECT * FROM users WHERE email = ? OR username = ?", (identifier, identifier))
     if row is None or not auth.verify_password(body.password, row["password_hash"]):
-        raise HTTPException(401, "Invalid email or password")
+        raise HTTPException(401, "Invalid email/username or password")
     if row["banned"]:
         raise HTTPException(403, "Account is disabled")
     token = auth.create_session(row["id"])
     _set_session_cookie(response, token)
-    user = {k: row[k] for k in ("id", "email", "name", "role", "banned")}
+    user = {k: row[k] for k in ("id", "username", "email", "name", "role", "banned")}
     return {"user": user, "entitlement": plans.get_entitlement(user, None)}
 
 
@@ -201,12 +232,29 @@ def me(request: Request) -> dict[str, Any]:
     }
 
 
+@app.get("/api/my-tokens")
+def my_tokens(request: Request) -> dict[str, Any]:
+    """Current balance plus the caller's recent token movements."""
+    user = auth.require_user(request)
+    entitlement = plans.get_entitlement(user, None)
+    return {
+        "tokens": entitlement["tokens"],
+        "unlimited": entitlement["unlimited"],
+        "tokens_spent": entitlement["tokens_spent"],
+        "entries": tokens.history("user", str(user["id"]), 50),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Plans / orders
 # ---------------------------------------------------------------------------
 @app.get("/api/plans")
 def api_plans() -> dict[str, Any]:
-    return {"plans": plans.list_plans()}
+    return {
+        "plans": plans.list_plans(),
+        "signup_tokens": tokens.SIGNUP_TOKENS,
+        "anonymous_tokens": tokens.ANON_TOKENS,
+    }
 
 
 @app.get("/api/my-orders")
@@ -294,16 +342,21 @@ def crypto_tx(body: CryptoTxBody, request: Request) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Solver (gated by entitlement)
+# Solver (gated by the token balance)
 # ---------------------------------------------------------------------------
 def _resolve_entitlement(request: Request, response: Response) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any] | None]:
     user, session = auth.current(request)
     if user is None and session is None:
-        token = auth.create_session(None)
+        token = auth.create_session(None, tokens.ANON_TOKENS)
         _set_session_cookie(response, token)
         session = {"token": token, "user_id": None}
     entitlement = plans.get_entitlement(user, session)
     return entitlement, user, session
+
+
+def _owner_keys(user: dict[str, Any] | None,
+                session: dict[str, Any] | None) -> tuple[str, str]:
+    return plans.owner_keys(user, session)
 
 
 def _limit_response(exc: plans.LimitError) -> HTTPException:
@@ -313,16 +366,28 @@ def _limit_response(exc: plans.LimitError) -> HTTPException:
     })
 
 
+def _token_summary(entitlement: dict[str, Any], charged: int,
+                   remaining: int | None) -> dict[str, Any]:
+    return {
+        "tier": entitlement["tier"],
+        "unlimited": bool(entitlement.get("unlimited")),
+        "tokens": remaining,
+        "tokens_charged": charged,
+        "solves_used": entitlement["solves_used"] + 1,
+    }
+
+
 @app.post("/solve")
 def solve(body: SolveBody, request: Request, response: Response) -> dict[str, object]:
+    if body.model not in MODEL_NAMES:
+        raise HTTPException(400, "Unknown model adapter")
     entitlement, user, session = _resolve_entitlement(request, response)
+    cost = tokens.cost_for(body.model, body.points)
     try:
-        plans.check_access(entitlement, body.model, body.points)
+        plans.check_access(entitlement, cost, f"Model '{body.model}'")
     except plans.LimitError as exc:
         raise _limit_response(exc) from exc
 
-    if body.model not in MODEL_NAMES:
-        raise HTTPException(400, "Unknown model adapter")
     if body.model in STIFF_MODELS and body.method == "RK45":
         method = "BDF"
     else:
@@ -336,61 +401,88 @@ def solve(body: SolveBody, request: Request, response: Response) -> dict[str, ob
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
-    owner = "user" if user else ("session" if session else "anon")
-    owner_id = str(user["id"]) if user else (session["token"] if session else "anon")
+    owner, owner_id = _owner_keys(user, session)
     plans.record_usage(owner, owner_id, body.points)
+    remaining = entitlement["tokens"]
+    if not entitlement.get("unlimited"):
+        remaining = tokens.charge(owner, owner_id, cost, f"solve:{body.model}")
 
     payload = _sanitize(result.__dict__)
-    payload["entitlement"] = {
-        "tier": entitlement["tier"],
-        "solves_used": entitlement["solves_used"] + 1,
-        "solves_per_day": entitlement["solves_per_day"],
-    }
+    payload["entitlement"] = _token_summary(entitlement, cost, remaining)
     return payload
 
 
 @app.post("/analyze")
-def analyze(body: AnalyzeBody) -> dict[str, object]:
+def analyze(body: AnalyzeBody, request: Request, response: Response) -> dict[str, object]:
+    entitlement, user, session = _resolve_entitlement(request, response)
+    cost = tokens.TOOL_COSTS["analyze"]
+    try:
+        plans.check_access(entitlement, cost, "Equation classification")
+    except plans.LimitError as exc:
+        raise _limit_response(exc) from exc
     local = classify_equation(body.text)
     local["language"] = body.language
-    return {"status": "classified", "data": local, "executable": False, "provider": "local"}
+    owner, owner_id = _owner_keys(user, session)
+    plans.record_usage(owner, owner_id, 0)
+    remaining = entitlement["tokens"]
+    if not entitlement.get("unlimited"):
+        remaining = tokens.charge(owner, owner_id, cost, "analyze")
+    return {
+        "status": "classified", "data": local, "executable": False, "provider": "local",
+        "entitlement": _token_summary(entitlement, cost, remaining),
+    }
 
 
 @app.post("/analyze/enhanced")
-def enhanced_analyze(body: AnalyzeBody) -> dict[str, object]:
+def enhanced_analyze(body: AnalyzeBody, request: Request,
+                     response: Response) -> dict[str, object]:
     """Optional remote enhancement; core behavior remains local if unavailable."""
+    entitlement, user, session = _resolve_entitlement(request, response)
+    cost = tokens.TOOL_COSTS["analyze_enhanced"]
+    try:
+        plans.check_access(entitlement, cost, "Enhanced analysis")
+    except plans.LimitError as exc:
+        raise _limit_response(exc) from exc
     try:
         result = analyze_equation(body.text, body.language)
+        provider = "external-enhancement"
     except (AIProviderError, ValueError):
         result = classify_equation(body.text)
         result["language"] = body.language
-        return {"status": "classified", "data": result, "executable": False, "provider": "local-fallback"}
+        provider = "local-fallback"
     if result.get("model") not in MODEL_NAMES:
         raise HTTPException(422, "AI selected an unsupported model")
-    return {"status": "classified", "data": result, "executable": False, "provider": "external-enhancement"}
+    owner, owner_id = _owner_keys(user, session)
+    plans.record_usage(owner, owner_id, 0)
+    remaining = entitlement["tokens"]
+    if not entitlement.get("unlimited"):
+        remaining = tokens.charge(owner, owner_id, cost, "analyze_enhanced")
+    return {
+        "status": "classified", "data": result, "executable": False, "provider": provider,
+        "entitlement": _token_summary(entitlement, cost, remaining),
+    }
 
 
 @app.post("/solve/symbolic")
 def symbolic(body: SymbolicBody, request: Request, response: Response) -> dict[str, object]:
-    # Symbolic solves consume quota like any other solve — no free bypass.
+    # Symbolic solves consume tokens like any other tool — no free bypass.
     entitlement, user, session = _resolve_entitlement(request, response)
+    cost = tokens.TOOL_COSTS["symbolic"]
     try:
-        plans.check_access(entitlement, "symbolic", SYMBOLIC_POINTS)
+        plans.check_access(entitlement, cost, "Symbolic solve")
     except plans.LimitError as exc:
         raise _limit_response(exc) from exc
     result = try_symbolic_first_order(body.equation, body.variable, body.independent)
     if result is None:
         raise HTTPException(422, "No verified symbolic solution was found")
-    owner = "user" if user else ("session" if session else "anon")
-    owner_id = str(user["id"]) if user else (session["token"] if session else "anon")
-    plans.record_usage(owner, owner_id, SYMBOLIC_POINTS)
+    owner, owner_id = _owner_keys(user, session)
+    plans.record_usage(owner, owner_id, 0)
+    remaining = entitlement["tokens"]
+    if not entitlement.get("unlimited"):
+        remaining = tokens.charge(owner, owner_id, cost, "symbolic")
     payload = {"status": "success", "solution": result, "verified": False,
                "message": "Symbolic result requires numerical verification for the supplied conditions."}
-    payload["entitlement"] = {
-        "tier": entitlement["tier"],
-        "solves_used": entitlement["solves_used"] + 1,
-        "solves_per_day": entitlement["solves_per_day"],
-    }
+    payload["entitlement"] = _token_summary(entitlement, cost, remaining)
     return payload
 
 

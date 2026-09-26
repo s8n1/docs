@@ -9,6 +9,14 @@ from api.main import app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def fresh_anon_session():
+    """Each test starts with a fresh anonymous trial-token budget."""
+    client.post("/api/auth/logout", json={})
+    yield
+    client.post("/api/auth/logout", json={})
+
+
 def test_health_reports_42_models():
     res = client.get("/health")
     assert res.status_code == 200
@@ -24,6 +32,9 @@ def test_models_metadata():
     assert data["count"] == 42
     adapters = data["adapters"]
     assert all(adapters[name]["status"] == "supported" for name in data["models"])
+    # every model family is priced in tokens for the UI
+    assert set(data["models"]) <= set(data["token_costs"])
+    assert data["tool_costs"]["symbolic"] > 0
 
 
 def test_index_serves_interactive_ui():
@@ -84,6 +95,23 @@ def test_solve_rejects_unsafe_input():
     }
     res = client.post("/solve", json=body)
     assert res.status_code == 422
+
+
+def test_solve_payload_includes_token_entitlement():
+    body = {
+        "model": "logistic",
+        "variables": ["y"],
+        "t_span": [0.0, 1.0],
+        "initial_values": [1.0],
+        "parameters": {"rate": 2.0, "capacity": 10.0},
+        "points": 100,
+    }
+    res = client.post("/solve", json=body)
+    assert res.status_code == 200
+    ent = res.json()["entitlement"]
+    assert ent["tokens_charged"] >= 1
+    assert isinstance(ent["tokens"], int)
+    assert ent["unlimited"] is False
 
 
 def test_stiff_model_forces_bdf_method():

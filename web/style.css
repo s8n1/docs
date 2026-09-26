@@ -200,6 +200,12 @@ code.kbd { color: var(--accent2); }
 }
 .plan-badge.pro { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #06121a; }
 .plan-badge.free { background: var(--panel2); color: var(--ink-dim); border: 1px solid var(--line2); }
+.plan-badge.admin { background: linear-gradient(135deg, var(--warn), var(--err)); color: #1a0f08; }
+.plan-usdt { font-size: 12.5px; color: var(--ink-dim); font-family: var(--mono); }
+.delta-pos { color: var(--ok); font-weight: 700; }
+.delta-neg { color: var(--err); font-weight: 700; }
+#cost-hint { margin-top: 10px; margin-bottom: 0; }
+#pricing-balance { color: var(--accent); }
 .upgrade-link { color: var(--accent); font-weight: 700; text-decoration: none; border-bottom: 1px dashed var(--accent); }
 .upgrade-link:hover { color: #7df2d2; }
 

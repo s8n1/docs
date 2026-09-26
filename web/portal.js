@@ -1,17 +1,16 @@
-/* Portal — auth, pricing, account, admin (no build step, no external deps) */
+/* Portal — auth, pricing (token packs), account, admin (no build step, no external deps) */
 "use strict";
 
 /* ---------- i18n (FA default, EN toggle) ---------- */
 const PORTAL_I18N = {
   "nav-solver": { en: "Solver", fa: "حل‌کننده" },
-  "nav-pricing": { en: "Pricing", fa: "تعرفه‌ها" },
+  "nav-pricing": { en: "Token packs", fa: "پک‌های توکن" },
   "nav-account": { en: "Account", fa: "حساب کاربری" },
   "nav-admin": { en: "Admin", fa: "پنل مدیریت" },
   "nav-login": { en: "Sign in", fa: "ورود" },
   "nav-logout": { en: "Log out", fa: "خروج" },
-  "tier-free": { en: "Free", fa: "رایگان" },
-  "tier-pro": { en: "Pro", fa: "حرفه‌ای" },
-  "tier-expired": { en: "Expired", fa: "منقضی شده" },
+  "tokens": { en: "tokens", fa: "توکن" },
+  "unlimited": { en: "unlimited", fa: "نامحدود" },
 };
 
 let PLANG = "fa";
@@ -29,10 +28,6 @@ function psetLang(lang) {
   document.querySelectorAll("[data-plang]").forEach((n) => {
     n.textContent = pget(n.dataset.plang);
   });
-  const en = document.getElementById("plang-en");
-  const fa = document.getElementById("plang-fa");
-  if (en) en.classList.toggle("active", lang === "en");
-  if (fa) fa.classList.toggle("active", lang === "fa");
 }
 
 /* ---------- API ---------- */
@@ -67,10 +62,28 @@ function fmtNum(n) {
   return Number(n).toLocaleString(PLANG === "fa" ? "fa-IR" : "en-US");
 }
 
+function fmtTokens(ent) {
+  if (!ent) return "–";
+  if (ent.unlimited) return "∞";
+  return fmtNum(ent.tokens);
+}
+
 function fmtDate(iso) {
   if (!iso) return "–";
   const d = new Date(iso);
   return d.toLocaleString(PLANG === "fa" ? "fa-IR" : "en-US", { dateStyle: "medium" });
+}
+
+function tokenBadge(ent) {
+  if (!ent) return el("span", "plan-badge free", "–");
+  if (ent.unlimited) {
+    const b = el("span", "plan-badge admin", "∞ " + (PLANG === "fa" ? "مدیر" : "ADMIN"));
+    b.title = pget("unlimited");
+    return b;
+  }
+  const b = el("span", "plan-badge " + (ent.tokens > 0 ? "pro" : "free"),
+    `${fmtNum(ent.tokens)} ${pget("tokens")}`);
+  return b;
 }
 
 /* ---------- Shared topbar ---------- */
@@ -110,9 +123,7 @@ async function renderTopbar() {
   const authArea = el("div", "auth-area");
   if (me && me.user) {
     const chip = el("div", "user-chip");
-    const badge = el("span", "plan-badge " + (me.entitlement.tier === "pro" ? "pro" : "free"),
-      me.entitlement.tier === "pro" ? "PRO" : pget("tier-free"));
-    chip.append(badge, el("span", "user-name", me.user.name));
+    chip.append(tokenBadge(me.entitlement), el("span", "user-name", me.user.name));
     const logout = el("button", "btn btn-small", pget("nav-logout"));
     logout.onclick = async () => {
       await papi("/api/auth/logout", {});
@@ -128,28 +139,28 @@ async function renderTopbar() {
   slot.append(brand, nav, lang, authArea);
 }
 
-function planBadge(ent) {
-  if (!ent) return el("span", "plan-badge free", pget("tier-free"));
-  const tier = ent.tier;
-  const expired = tier === "free" && ent.ends_at && new Date(ent.ends_at) < new Date();
-  const cls = tier === "pro" ? "pro" : "free";
-  const label = tier === "pro" ? "PRO" : (expired ? pget("tier-expired") : pget("tier-free"));
-  return el("span", "plan-badge " + cls, label);
-}
-
 /* ---------- Auth page ---------- */
 async function initAuthPage() {
   const form = document.getElementById("auth-form");
   const title = document.getElementById("auth-title");
   const submit = document.getElementById("auth-submit");
   const errBox = document.getElementById("auth-error");
+  const label = document.getElementById("in-identifier-label");
   let mode = "login";
 
   function setMode(m) {
     mode = m;
-    title.textContent = m === "login" ? (PLANG === "fa" ? "ورود به حساب" : "Sign in") : (PLANG === "fa" ? "ساخت حساب جدید" : "Create account");
-    submit.textContent = m === "login" ? (PLANG === "fa" ? "ورود" : "Sign in") : (PLANG === "fa" ? "ثبت‌نام" : "Sign up");
+    title.textContent = m === "login"
+      ? (PLANG === "fa" ? "ورود به حساب" : "Sign in")
+      : (PLANG === "fa" ? "ساخت حساب جدید" : "Create account");
+    submit.textContent = m === "login"
+      ? (PLANG === "fa" ? "ورود" : "Sign in")
+      : (PLANG === "fa" ? "ثبت‌نام" : "Sign up");
+    if (label) label.textContent = m === "login"
+      ? (PLANG === "fa" ? "ایمیل یا نام کاربری" : "Email or username")
+      : (PLANG === "fa" ? "ایمیل" : "Email");
     document.getElementById("field-name").classList.toggle("hidden", m === "login");
+    document.getElementById("field-username").classList.toggle("hidden", m === "login");
     errBox.classList.add("hidden");
   }
   document.getElementById("tab-login").onclick = () => setMode("login");
@@ -158,15 +169,18 @@ async function initAuthPage() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errBox.classList.add("hidden");
-    const email = document.getElementById("in-email").value.trim();
+    const identifier = document.getElementById("in-identifier").value.trim();
     const password = document.getElementById("in-password").value;
     const name = document.getElementById("in-name").value.trim();
-    const body = mode === "login" ? { email, password } : { email, password, name };
+    const username = document.getElementById("in-username").value.trim();
+    const body = mode === "login"
+      ? { identifier, password }
+      : { email: identifier, password, name, username: username || null };
     submit.disabled = true;
     try {
       await papi("/api/auth/" + (mode === "login" ? "login" : "register"), body);
       const ret = new URLSearchParams(location.search).get("returnTo");
-      location.href = ret && ret.startsWith("/") ? ret : "/";
+      location.href = ret && ret.startsWith("/") ? ret : "/account";
     } catch (err) {
       errBox.textContent = `✗ ${err.message}`;
       errBox.classList.remove("hidden");
@@ -176,15 +190,26 @@ async function initAuthPage() {
   setMode("login");
 }
 
-/* ---------- Pricing page ---------- */
+/* ---------- Pricing page (token packs) ---------- */
 async function initPricingPage() {
   const grid = document.getElementById("plans-grid");
   const modal = document.getElementById("pay-modal");
   const modalBody = document.getElementById("pay-modal-body");
   const closeBtn = document.getElementById("pay-modal-close");
+  const balanceBox = document.getElementById("pricing-balance");
 
   let me = null;
   try { me = await papi("/api/me"); } catch (_) { /* */ }
+
+  if (balanceBox) {
+    if (me && me.user) {
+      balanceBox.textContent = `${PLANG === "fa" ? "موجودی فعلی" : "Current balance"}: ${fmtTokens(me.entitlement)} ${pget("tokens")}`;
+    } else {
+      balanceBox.textContent = PLANG === "fa"
+        ? "بدون ثبت‌نام هم می‌توانید با توکن‌های آزمایشی حل‌کننده را امتحان کنید."
+        : "You can try the solver with trial tokens before signing up.";
+    }
+  }
 
   function closeModal() {
     modal.classList.add("hidden");
@@ -193,23 +218,25 @@ async function initPricingPage() {
   closeBtn.onclick = closeModal;
   modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
 
-  const { plans } = await papi("/api/plans");
-  plans.forEach((plan) => {
-    if (plan.slug === "free") return;
+  const plansData = await papi("/api/plans");
+  const paidPlans = (plansData.plans || []).filter((p) => p.slug !== "free");
+  paidPlans.forEach((plan) => {
     const card = el("div", "plan-card");
     card.appendChild(el("div", "plan-name", PLANG === "fa" ? plan.name_fa : plan.name_en));
     card.appendChild(el("div", "plan-desc", plan.description));
-    const dur = plan.duration_days >= 360 ? "/ سال" : plan.duration_days >= 25 ? "/ ماه" : `/ ${plan.duration_days} روز`;
-    card.appendChild(el("div", "plan-price", fmtNum(plan.price_toman) + ` <small>تومان ${dur}</small>`));
+    const price = el("div", "plan-price");
+    price.innerHTML = `${fmtNum(plan.price_toman)} <small>${PLANG === "fa" ? "تومان" : "Toman"}</small>`;
+    card.appendChild(price);
+    card.appendChild(el("div", "plan-usdt", `≈ ${fmtNum(plan.price_usdt)} USDT`));
     const list = el("ul", "plan-features");
     [
-      `${fmtNum(plan.solves_per_day)} حل در روز`,
-      `حداکثر ${fmtNum(plan.max_points)} نقطه خروجی`,
-      "دسترسی به مدل‌های ویژه",
-      `${plan.duration_days} روز اعتبار`,
+      `${fmtNum(plan.tokens)} ${PLANG === "fa" ? "توکن" : "tokens"}`,
+      PLANG === "fa" ? "بدون انقضا — زمان مهم نیست" : "Never expires — time plays no role",
+      PLANG === "fa" ? "پرداخت با زرین‌پال یا USDT (TRC20)" : "Pay with ZarinPal or USDT (TRC20)",
+      PLANG === "fa" ? "شارژ فوری روی همین حساب" : "Credited to this account instantly",
     ].forEach((f) => list.appendChild(el("li", "", f)));
     card.appendChild(list);
-    const buy = el("button", "btn btn-primary", PLANG === "fa" ? "خرید اشتراک" : "Buy");
+    const buy = el("button", "btn btn-primary", PLANG === "fa" ? "خرید پک" : "Buy pack");
     buy.onclick = () => {
       if (!me || !me.user) {
         location.href = "/auth?returnTo=/pricing";
@@ -217,8 +244,10 @@ async function initPricingPage() {
       }
       modalBody.innerHTML = "";
       modalBody.appendChild(el("h3", "", PLANG === "fa" ? "روش پرداخت" : "Payment method"));
-      const choose = (gateway, label) => {
-        const b = el("button", "btn gateway-btn", label);
+      modalBody.appendChild(el("p", "hint",
+        `${plan.tokens} ${pget("tokens")} · ${fmtNum(plan.price_toman)} ${PLANG === "fa" ? "تومان" : "Toman"}`));
+      const choose = (gateway, label2) => {
+        const b = el("button", "btn gateway-btn", label2);
         b.onclick = async () => {
           b.disabled = true;
           try {
@@ -228,28 +257,33 @@ async function initPricingPage() {
             } else if (res.wallet) {
               modalBody.innerHTML = "";
               modalBody.appendChild(el("h3", "", "USDT (TRC20)"));
-              modalBody.appendChild(el("p", "hint", `مبلغ: ${res.amount_usdt} USDT — شبکه TRC20`));
+              modalBody.appendChild(el("p", "hint",
+                `${PLANG === "fa" ? "مبلغ" : "Amount"}: ${res.amount_usdt} USDT — TRC20`));
               const addr = el("div", "crypto-addr", res.wallet);
-              const copy = el("button", "btn btn-small", "کپی آدرس");
+              const copy = el("button", "btn btn-small", PLANG === "fa" ? "کپی آدرس" : "Copy address");
               copy.onclick = () => {
                 navigator.clipboard && navigator.clipboard.writeText(res.wallet);
                 copy.textContent = "✓";
               };
               modalBody.append(addr, copy);
-              const orderId = res.order_id;
-              modalBody.appendChild(el("p", "hint", `شماره سفارش: ${orderId} — پس از واریز، TXID را وارد کنید.`));
+              modalBody.appendChild(el("p", "hint",
+                PLANG === "fa"
+                  ? `پس از واریز، TXID را ثبت کنید. با تأیید ادمین ${res.tokens} توکن اضافه می‌شود.`
+                  : `After sending, submit the TXID. Once an admin verifies it, ${res.tokens} tokens are credited.`));
               const tx = el("input", "");
               tx.type = "text";
               tx.placeholder = "Transaction ID (TXID)";
-              tx.style.marginTop = "8px";
-              const send = el("button", "btn btn-primary", "ثبت تراکنش");
+              const send = el("button", "btn btn-primary", PLANG === "fa" ? "ثبت تراکنش" : "Submit TXID");
               const msg = el("div", "hint");
               send.onclick = async () => {
-                if (!tx.value.trim()) { msg.textContent = "TXID را وارد کنید"; return; }
+                if (!tx.value.trim()) {
+                  msg.textContent = PLANG === "fa" ? "TXID را وارد کنید" : "Enter the TXID";
+                  return;
+                }
                 send.disabled = true;
                 try {
-                  const out = await papi("/api/payment/crypto/tx", { order_id: orderId, txid: tx.value.trim() });
-                  msg.textContent = "✓ " + (out.message || "در انتظار تأیید ادمین");
+                  const out = await papi("/api/payment/crypto/tx", { order_id: res.order_id, txid: tx.value.trim() });
+                  msg.textContent = "✓ " + (PLANG === "fa" ? "ثبت شد — در انتظار تأیید ادمین" : (out.message || "Awaiting admin verification"));
                 } catch (err) {
                   msg.textContent = `✗ ${err.message}`;
                   send.disabled = false;
@@ -265,9 +299,9 @@ async function initPricingPage() {
         return b;
       };
       modalBody.append(
-        choose("zarinpal", "زرین‌پال (کارت بانکی)"),
-        choose("idpay", "آیدی‌پی (درگاه بانکی)"),
+        choose("zarinpal", PLANG === "fa" ? "زرین‌پال (کارت بانکی)" : "ZarinPal (bank card)"),
         choose("crypto", "USDT — TRC20"),
+        choose("idpay", PLANG === "fa" ? "آیدی‌پی (درگاه بانکی)" : "IDPay (bank gateway)"),
       );
       modal.classList.remove("hidden");
     };
@@ -290,27 +324,88 @@ async function initAccountPage() {
   }
   const ent = me.entitlement;
   const card = el("div", "card");
-  card.appendChild(el("h2", "", PLANG === "fa" ? "وضعیت اشتراک" : "Subscription"));
+  card.appendChild(el("h2", "", PLANG === "fa" ? "توکن‌های من" : "My tokens"));
   const row = el("div", "res-grid");
   const stat = (k, v) => {
     const s = el("div", "stat");
     s.append(el("div", "k", k), el("div", "v", v));
     row.appendChild(s);
   };
-  stat("پلن", ent.tier === "pro" ? (PLANG === "fa" ? ent.plan_name_fa : ent.plan_name_en) : "Free");
-  stat("اعتبار تا", fmtDate(ent.ends_at));
-  stat("حل امروز", `${fmtNum(ent.solves_used)} / ${fmtNum(ent.solves_per_day)}`);
-  stat("نقاط امروز", `${fmtNum(ent.points_used)} / ${fmtNum(ent.max_points)}`);
+  stat(PLANG === "fa" ? "موجودی" : "Balance", ent.unlimited ? "∞" : fmtNum(ent.tokens));
+  stat(PLANG === "fa" ? "مصرف کل" : "Spent", fmtNum(ent.tokens_spent));
+  stat(PLANG === "fa" ? "حل امروز" : "Solves today", fmtNum(ent.solves_used));
+  stat(PLANG === "fa" ? "نقاط امروز" : "Points today", fmtNum(ent.points_used));
   card.appendChild(row);
+  if (ent.unlimited) {
+    card.appendChild(el("p", "hint", PLANG === "fa"
+      ? "حساب مدیر: دسترسی نامحدود و بدون کسر توکن."
+      : "Admin account: unlimited access, tokens are never deducted."));
+  }
+  const buy = el("a", "btn btn-primary", PLANG === "fa" ? "خرید پک توکن" : "Buy a token pack");
+  buy.href = "/pricing";
+  if (!ent.unlimited) card.appendChild(buy);
 
+  /* Token costs by difficulty */
+  const costCard = el("div", "card");
+  costCard.appendChild(el("h2", "", PLANG === "fa" ? "هزینهٔ ابزارها و مدل‌ها" : "Tool & model costs"));
+  const costs = ent.model_costs || {};
+  const toolCosts = ent.tool_costs || {};
+  const buildCostTable = (entries) => {
+    const table = el("table", "portal-table");
+    const head = el("tr", "");
+    [PLANG === "fa" ? "ابزار" : "Tool", PLANG === "fa" ? "توکن" : "Tokens"].forEach((h) => head.appendChild(el("th", "", h)));
+    table.appendChild(head);
+    entries.sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
+    entries.forEach(([name, cost]) => {
+      const tr = el("tr", "");
+      tr.append(el("td", "", name.replace(/_/g, " ")), el("td", "", fmtNum(cost)));
+      table.appendChild(tr);
+    });
+    return table;
+  };
+  if (Object.keys(toolCosts).length) {
+    costCard.appendChild(el("h3", "", PLANG === "fa" ? "ابزارها" : "Tools"));
+    costCard.appendChild(buildCostTable(Object.entries(toolCosts)));
+  }
+  costCard.appendChild(el("h3", "", PLANG === "fa" ? "مدل‌ها (بر اساس سختی)" : "Models (by difficulty)"));
+  costCard.appendChild(buildCostTable(Object.entries(costs)));
+
+  /* Token history */
+  const ledgerCard = el("div", "card");
+  ledgerCard.appendChild(el("h2", "", PLANG === "fa" ? "تاریخچهٔ توکن" : "Token history"));
+  try {
+    const data = await papi("/api/my-tokens");
+    const entries = data.entries || [];
+    if (!entries.length) {
+      ledgerCard.appendChild(el("p", "hint", PLANG === "fa" ? "حرکتی ثبت نشده است." : "No movements yet."));
+    } else {
+      const table = el("table", "portal-table");
+      const head = el("tr", "");
+      [PLANG === "fa" ? "تغییر" : "Delta", PLANG === "fa" ? "دلیل" : "Reason",
+        PLANG === "fa" ? "موجودی" : "Balance", PLANG === "fa" ? "تاریخ" : "Date"]
+        .forEach((h) => head.appendChild(el("th", "", h)));
+      table.appendChild(head);
+      entries.forEach((e) => {
+        const tr = el("tr", "");
+        const deltaCell = el("td", e.delta > 0 ? "delta-pos" : "delta-neg", (e.delta > 0 ? "+" : "") + fmtNum(e.delta));
+        tr.append(deltaCell, el("td", "", e.reason), el("td", "", fmtNum(e.balance_after)), el("td", "", fmtDate(e.created_at)));
+        table.appendChild(tr);
+      });
+      ledgerCard.appendChild(table);
+    }
+  } catch (_) { /* history not critical */ }
+
+  /* Orders */
   const ordersCard = el("div", "card");
-  ordersCard.appendChild(el("h2", "", "سفارش‌های من"));
+  ordersCard.appendChild(el("h2", "", PLANG === "fa" ? "سفارش‌های من" : "My orders"));
   try {
     const orders = await papi("/api/my-orders");
     if (!orders.length) ordersCard.appendChild(el("p", "hint", "سفارشی وجود ندارد."));
     const table = el("table", "portal-table");
     const head = el("tr", "");
-    ["#", "پلن", "درگاه", "مبلغ", "وضعیت", "تاریخ"].forEach((h) => head.appendChild(el("th", "", h)));
+    ["#", PLANG === "fa" ? "پک" : "Pack", PLANG === "fa" ? "درگاه" : "Gateway",
+      PLANG === "fa" ? "مبلغ" : "Amount", PLANG === "fa" ? "وضعیت" : "Status",
+      PLANG === "fa" ? "تاریخ" : "Date"].forEach((h) => head.appendChild(el("th", "", h)));
     table.appendChild(head);
     orders.forEach((o) => {
       const tr = el("tr", "");
@@ -324,7 +419,7 @@ async function initAccountPage() {
   const result = new URLSearchParams(location.search).get("result");
   if (result === "success") {
     const b = el("div", "banner banner-warn");
-    b.textContent = "✓ پرداخت موفق — اشتراک شما فعال شد.";
+    b.textContent = "✓ پرداخت موفق — توکن‌ها به حساب شما اضافه شد.";
     box.prepend(b);
   } else if (result === "failed") {
     const b = el("div", "banner banner-error");
@@ -332,17 +427,31 @@ async function initAccountPage() {
     box.prepend(b);
   }
 
-  box.append(card, ordersCard);
+  box.append(card, costCard, ledgerCard, ordersCard);
 }
 
 /* ---------- Admin page ---------- */
 async function initAdminPage() {
-  const box = document.getElementById("admin-box");
+  const me = await papi("/api/me");
+  if (!me.user) {
+    location.href = "/auth?returnTo=/admin";
+    return;
+  }
+  if (me.user.role !== "admin") {
+    location.href = "/";
+    return;
+  }
   const tabs = document.querySelectorAll(".admin-tab");
-  const sections = { stats: document.getElementById("sec-stats"), users: document.getElementById("sec-users"), orders: document.getElementById("sec-orders"), settings: document.getElementById("sec-settings") };
+  const sections = {
+    stats: document.getElementById("sec-stats"),
+    users: document.getElementById("sec-users"),
+    orders: document.getElementById("sec-orders"),
+    ledger: document.getElementById("sec-ledger"),
+    settings: document.getElementById("sec-settings"),
+  };
   const show = (name) => {
     tabs.forEach((t) => t.classList.toggle("active", t.dataset.sec === name));
-    Object.entries(sections).forEach(([k, v]) => v.classList.toggle("hidden", k !== name));
+    Object.entries(sections).forEach(([k, v]) => { if (v) v.classList.toggle("hidden", k !== name); });
   };
   tabs.forEach((t) => (t.onclick = () => show(t.dataset.sec)));
 
@@ -352,9 +461,16 @@ async function initAdminPage() {
     const grid = document.getElementById("stats-grid");
     grid.innerHTML = "";
     const items = [
-      ["کاربران", s.users_total], ["ادمین‌ها", s.admins], ["مسدود", s.banned],
-      ["اشتراک فعال", s.active_subscriptions], ["سفارش کل", s.orders_total],
-      ["پرداخت موفق", s.paid_orders], ["حل امروز", s.solves_today],
+      [PLANG === "fa" ? "کاربران" : "Users", s.users_total],
+      [PLANG === "fa" ? "ادمین‌ها" : "Admins", s.admins],
+      [PLANG === "fa" ? "مسدود" : "Banned", s.banned],
+      [PLANG === "fa" ? "توکن در گردش" : "Tokens outstanding", s.tokens_outstanding],
+      [PLANG === "fa" ? "توکن فروخته‌شده" : "Tokens added", s.tokens_sold],
+      [PLANG === "fa" ? "توکن مصرف‌شده" : "Tokens spent", s.tokens_spent],
+      [PLANG === "fa" ? "سفارش کل" : "Orders", s.orders_total],
+      [PLANG === "fa" ? "پرداخت موفق" : "Paid", s.paid_orders],
+      [PLANG === "fa" ? "در انتظار تأیید" : "Awaiting confirm", s.pending_orders],
+      [PLANG === "fa" ? "حل امروز" : "Solves today", s.solves_today],
     ];
     items.forEach(([k, v]) => {
       const d = el("div", "stat");
@@ -364,39 +480,72 @@ async function initAdminPage() {
     const rev = Object.entries(s.revenue || {});
     if (rev.length) {
       const d = el("div", "stat");
-      d.append(el("div", "k", "درآمد"), el("div", "v small", rev.map(([c, v]) => `${fmtNum(v)} ${c}`).join(" · ")));
+      d.append(el("div", "k", PLANG === "fa" ? "درآمد" : "Revenue"),
+        el("div", "v small", rev.map(([c, v]) => `${fmtNum(v)} ${c}`).join(" · ")));
       grid.appendChild(d);
     }
   }
 
   /* users */
+  let plans = [];
+  try { plans = (await papi("/api/plans")).plans.filter((p) => p.slug !== "free"); } catch (_) { /* */ }
+
   async function loadUsers() {
     const users = await papi("/api/admin/users");
     const tb = document.getElementById("users-body");
     tb.innerHTML = "";
     users.forEach((u) => {
       const tr = el("tr", "");
-      const name = el("td", "", u.name);
-      const mail = el("td", "", u.email);
+      const idTd = el("td", "", "#" + u.id);
+      const nameCell = el("td", "");
+      nameCell.append(el("div", "", u.name), el("div", "hint", u.username ? "@" + u.username : u.email));
       const roleTd = el("td", "");
       const roleBtn = el("button", "btn btn-small" + (u.role === "admin" ? " btn-primary" : ""), u.role);
       roleBtn.onclick = async () => {
-        await papi(`/api/admin/users/${u.id}/role`, { role: u.role === "admin" ? "user" : "admin" }, "PATCH");
-        loadUsers();
+        try {
+          await papi(`/api/admin/users/${u.id}/role`, { role: u.role === "admin" ? "user" : "admin" }, "PATCH");
+          loadUsers();
+        } catch (err) { alert(err.message); }
       };
       roleTd.appendChild(roleBtn);
-      const subTd = el("td", "", u.subscription_plan ? `${u.subscription_plan} — ${fmtDate(u.subscription_ends_at)}` : "—");
+      const tokenTd = el("td", "");
+      tokenTd.append(
+        el("div", "", `${fmtNum(u.tokens)} ${pget("tokens")}`),
+        el("div", "hint", `${PLANG === "fa" ? "مصرف" : "spent"}: ${fmtNum(u.tokens_spent)}`),
+      );
+      const adjustTd = el("td", "");
+      const amount = el("input", "");
+      amount.type = "number";
+      amount.placeholder = "±500";
+      const applyBtn = el("button", "btn btn-small", PLANG === "fa" ? "اعمال" : "Apply");
+      applyBtn.onclick = async () => {
+        const delta = Number(amount.value);
+        if (!delta) { alert(PLANG === "fa" ? "مقدار را وارد کنید" : "Enter an amount"); return; }
+        try {
+          await papi(`/api/admin/users/${u.id}/tokens`, { delta, reason: "admin panel" });
+          loadUsers();
+          loadStats();
+        } catch (err) { alert(err.message); }
+      };
+      const plus = el("button", "btn btn-small", "+500");
+      plus.onclick = async () => {
+        await papi(`/api/admin/users/${u.id}/tokens`, { delta: 500, reason: "admin panel" });
+        loadUsers();
+        loadStats();
+      };
+      adjustTd.append(amount, applyBtn, plus);
       const grantTd = el("td", "");
       const sel = el("select", "");
-      sel.innerHTML = '<option value="pro_monthly">pro_monthly</option><option value="pro_yearly">pro_yearly</option>';
-      const days = el("input", "");
-      days.type = "number"; days.min = 1; days.placeholder = "days";
-      const grantBtn = el("button", "btn btn-small btn-primary", "اعطا");
+      sel.innerHTML = plans.map((p) => `<option value="${p.slug}">${p.name_fa} (${p.tokens})</option>`).join("");
+      const grantBtn = el("button", "btn btn-small btn-primary", PLANG === "fa" ? "اعطا" : "Grant");
       grantBtn.onclick = async () => {
-        await papi("/api/admin/subscriptions/grant", { user_id: u.id, plan_slug: sel.value, days: days.value ? Number(days.value) : null });
-        loadUsers();
+        try {
+          await papi("/api/admin/tokens/grant", { user_id: u.id, plan_slug: sel.value });
+          loadUsers();
+          loadStats();
+        } catch (err) { alert(err.message); }
       };
-      grantTd.append(sel, days, grantBtn);
+      grantTd.append(sel, grantBtn);
       const banTd = el("td", "");
       const banBtn = el("button", "btn btn-small" + (u.banned ? " btn-primary" : ""), u.banned ? "unban" : "ban");
       banBtn.onclick = async () => {
@@ -404,7 +553,7 @@ async function initAdminPage() {
         loadUsers();
       };
       banTd.appendChild(banBtn);
-      tr.append(name, mail, roleTd, subTd, grantTd, banTd);
+      tr.append(idTd, nameCell, roleTd, tokenTd, adjustTd, grantTd, banTd);
       tb.appendChild(tr);
     });
   }
@@ -414,23 +563,37 @@ async function initAdminPage() {
     const orders = await papi("/api/admin/orders");
     const tb = document.getElementById("orders-body");
     tb.innerHTML = "";
+    const EXPLORER = "https://tronscan.org/#/transaction/";
     orders.forEach((o) => {
       const tr = el("tr", "");
       tr.append(
         el("td", "", String(o.id)),
-        el("td", "", o.email || "—"),
+        el("td", "", o.username ? "@" + o.username : (o.email || "—")),
         el("td", "", o.plan_slug),
         el("td", "", o.gateway),
         el("td", "", `${fmtNum(o.amount)} ${o.currency}`),
         el("td", "", o.status),
-        el("td", "", o.txid ? o.txid.slice(0, 16) + "…" : "—"),
       );
+      const txTd = el("td", "");
+      if (o.txid) {
+        const a = el("a", "", o.txid.slice(0, 18) + (o.txid.length > 18 ? "…" : ""));
+        a.href = EXPLORER + o.txid;
+        a.target = "_blank";
+        a.rel = "noopener";
+        txTd.appendChild(a);
+      } else {
+        txTd.textContent = "—";
+      }
+      tr.appendChild(txTd);
       const act = el("td", "");
-      if (o.gateway === "crypto" && o.status === "pending_confirm") {
-        const b = el("button", "btn btn-small btn-primary", "تأیید پرداخت");
+      if (o.gateway === "crypto" && (o.status === "pending" || o.status === "pending_confirm")) {
+        const b = el("button", "btn btn-small btn-primary", PLANG === "fa" ? "تأیید پرداخت" : "Confirm");
         b.onclick = async () => {
-          await papi(`/api/admin/orders/${o.id}/confirm`, {});
-          loadOrders();
+          try {
+            await papi(`/api/admin/orders/${o.id}/confirm`, {});
+            loadOrders();
+            loadStats();
+          } catch (err) { alert(err.message); }
         };
         act.appendChild(b);
       }
@@ -439,15 +602,35 @@ async function initAdminPage() {
     });
   }
 
+  /* token ledger */
+  async function loadLedger() {
+    const entries = await papi("/api/admin/tokens/ledger");
+    const tb = document.getElementById("ledger-body");
+    tb.innerHTML = "";
+    entries.forEach((e) => {
+      const tr = el("tr", "");
+      const who = e.username ? "@" + e.username : (e.email || `${e.owner}:${String(e.owner_id).slice(0, 12)}`);
+      tr.append(
+        el("td", "", String(e.id)),
+        el("td", "", who),
+        el("td", e.delta > 0 ? "delta-pos" : "delta-neg", (e.delta > 0 ? "+" : "") + fmtNum(e.delta)),
+        el("td", "", e.reason),
+        el("td", "", fmtNum(e.balance_after)),
+        el("td", "", fmtDate(e.created_at)),
+      );
+      tb.appendChild(tr);
+    });
+  }
+
   /* settings */
   const settings = await papi("/api/admin/settings");
   document.getElementById("set-usdt").value = settings.usdt_wallet || "";
-  document.getElementById("set-premium").value = settings.premium_models || "[]";
+  document.getElementById("set-costs").value = settings.model_token_costs || "{}";
   document.getElementById("save-settings").onclick = async () => {
     const msg = document.getElementById("settings-msg");
     try {
       await papi("/api/admin/settings", { key: "usdt_wallet", value: document.getElementById("set-usdt").value.trim() });
-      await papi("/api/admin/settings", { key: "premium_models", value: document.getElementById("set-premium").value.trim() });
+      await papi("/api/admin/settings", { key: "model_token_costs", value: document.getElementById("set-costs").value.trim() });
       msg.textContent = "✓ ذخیره شد";
     } catch (err) {
       msg.textContent = `✗ ${err.message}`;
@@ -457,6 +640,7 @@ async function initAdminPage() {
   await loadStats();
   await loadUsers();
   await loadOrders();
+  await loadLedger();
   show("stats");
 }
 
