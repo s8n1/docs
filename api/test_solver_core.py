@@ -1,7 +1,5 @@
 """Comprehensive tests for all 42 solver model families."""
 import numpy as np
-import pytest
-from scipy.special import jn as scipy_jn, eval_hermite
 
 from api.local_intelligence import classify_equation
 from api.solver_core import (

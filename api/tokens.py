@@ -87,7 +87,7 @@ TOOL_COSTS: dict[str, int] = {
 }
 
 SIGNUP_TOKENS = 50      # credited to every new account
-ANON_TOKENS = 20        # trial balance for anonymous sessions
+ANON_TOKENS = 40        # trial balance for anonymous sessions (10 symbolic solves)
 
 POINTS_INCLUDED = 500   # every solve includes this many output points
 POINTS_PER_EXTRA_TOKEN = 1_000  # +1 token per extra 1000 points
@@ -114,6 +114,16 @@ def model_costs() -> dict[str, int]:
             ):
                 costs[name] = value
     return costs
+
+
+def skill_cost(skill_id: str, default: int) -> int:
+    """Price of a named skill, overridable from the admin panel.
+
+    Skills share the ``model_token_costs`` override table with the model
+    families, so an operator can reprice either with the same setting.
+    """
+    override = model_costs().get(skill_id)
+    return int(default) if override is None else int(override)
 
 
 def points_surcharge(points: int) -> int:

@@ -238,6 +238,26 @@ def init_db() -> None:
     _ensure_admin()
 
 
+def find_user(identifier: str) -> dict[str, Any] | None:
+    """Look an account up by email or username (case-insensitive)."""
+    needle = (identifier or "").strip().lower()
+    if not needle:
+        return None
+    return query_one(
+        "SELECT id, username, email, name, role, banned, token_balance "
+        "FROM users WHERE lower(email) = ? OR lower(username) = ?",
+        (needle, needle),
+    )
+
+
+def set_role(user_id: int, role: str) -> None:
+    execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+
+
+def set_password_hash(user_id: int, password_hash: str) -> None:
+    execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+
+
 def reset_db() -> None:
     """Drop every table and re-initialize (used by tests)."""
     conn = connect()

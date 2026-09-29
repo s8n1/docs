@@ -1,0 +1,8 @@
+# Development-only tooling. Kept out of requirements.txt so the production
+# image installs the engine and nothing else.
+#
+#   .venv/bin/python -m pip install -r requirements-dev.txt
+#   .venv/bin/python -m ruff check api/
+-r requirements.txt
+
+ruff>=0.16,<1

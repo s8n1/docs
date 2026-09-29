@@ -1,0 +1,108 @@
+---
+title: "Solver skills"
+description: "Named solver capabilities the engine and its AI layer share: APIs, prices, and how a request is routed to one."
+icon: "wand-magic-sparkles"
+---
+
+A **skill** is one named capability with a stable id, a bilingual description, a
+token price, and a single entry point. The same registry powers three things:
+
+1. the `/skills` API, so a client can call a capability by name;
+2. the AI layer, so a model can *plan* with the catalog before it answers;
+3. the interactive workspace, which renders the catalog in the **Solver skills** tab.
+
+Every skill returns the same payload shape as the free-form solver
+(`status`, `kind`, `solution`, `t`, `y`, `message`, `hint`, plus `metadata`), so
+one renderer handles all of them.
+
+## The catalog
+
+| Skill | Category | Cost | What it answers |
+| --- | --- | --- | --- |
+| `riccati_reduction` | symbolic | 3 | `y' = a(t)y² + b(t)y + c(t)` via the substitution `y = -u'/(a·u)`, which turns it into a linear second-order equation. `y' = y² - t` becomes the Airy equation and comes back in closed form. |
+| `power_series` | symbolic | 3 | Series solution about a point, keeping the free constants `C1`/`C2`. |
+| `frobenius` | symbolic | 4 | Indicial equation and series at a regular singular point (Bessel, Legendre, …), including whether the second solution needs a logarithm. |
+| `equilibria_stability` | analysis | 3 | Every equilibrium of a first-order system with its Jacobian classification (node, spiral, saddle, centre). |
+| `lyapunov_spectrum` | analysis | 5 | Benettin QR estimate of the full Lyapunov spectrum, so chaos is a number rather than an impression. |
+| `bifurcation_sweep` | analysis | 6 | Continues the equilibrium branch across a parameter and flags where stability changes. |
+| `sensitivity_analysis` | analysis | 4 | Integrates the variational equations for `∂y(t)/∂y(0)` and reports the amplification. |
+| `stiffness_scan` | analysis | 3 | Eigenvalues of the Jacobian along a trajectory give the stiffness ratio and a method recommendation. |
+
+Two of these are not extra code paths: `riccati_reduction` and `power_series`
+are the exact functions the free-form solver already calls internally. Listing
+them as skills means the classification layer can name the method it intends to
+use before spending tokens on it.
+
+## Endpoints
+
+```text
+GET  /skills                     the catalog — free, so an agent can plan first
+POST /skills/match               rank skills against a plain-language request
+POST /skills/{skill_id}          run one skill (charged at that skill's price)
+```
+
+A skill that cannot answer costs nothing: the request returns
+`status: "failed"` with an explanation and a `tokens_charged` of `0`.
+
+A system is written as a list of first-order equations. Both prime and Leibniz
+notation are accepted, so the examples below use `dx/dt` and avoid shell quoting.
+
+<CodeGroup>
+```bash Request a match
+curl -X POST "$BASE/skills/match" -H 'content-type: application/json' \
+  -d '{"text": "is this system chaotic?", "limit": 3}'
+```
+
+```bash Run the Lyapunov skill on the Lorenz system
+curl -X POST "$BASE/skills/lyapunov_spectrum" -H 'content-type: application/json' \
+  -d '{"system": ["dx/dt = 10*(y - x)", "dy/dt = x*(28 - z) - y", "dz/dt = x*y - 8*z/3"],
+       "initial_values": [1, 1, 1], "t_span": [0, 60]}'
+# → lambda1 ≈ +0.80, lambda2 ≈ 0, lambda3 ≈ -14.4
+```
+
+```bash Frobenius series for Bessel
+curl -X POST "$BASE/skills/frobenius" -H 'content-type: application/json' \
+  -d '{"equation": "t^2*d2y/dt2 + t*dy/dt + (t^2 - 1/4)*y = 0"}'
+```
+</CodeGroup>
+
+The symbolic skills also accept the same notation the workspace uses, including
+primes: `{"equation": "y'' + t*y' + t^2*y = 0"}`.
+
+## Routing a request to a skill
+
+`POST /skills/match` is deterministic and offline: curated keywords score
+highest, and a word that also appears in a skill's own description adds a
+smaller amount. That is why *"is this system chaotic?"* reaches
+`lyapunov_spectrum` without an LLM. Nothing matching returns an empty list
+rather than an arbitrary suggestion.
+
+`POST /analyze` uses the same matcher locally and adds `skill` and `skill_name`
+to its response. `POST /analyze/enhanced` passes the whole catalog in the prompt
+and accepts a `skill` back only if the id is one the registry knows — the model
+chooses, the registry validates.
+
+## Prices
+
+Skill prices live in the registry and share the `model_token_costs` override
+table with the 42 model families, so an operator can reprice a skill from the
+admin panel with the same setting:
+
+```json
+{ "lyapunov_spectrum": 8, "bifurcation_sweep": 4 }
+```
+
+## Agent skills
+
+Separately from the skills above, this repository vendors twelve third-party
+**Agent Skills** under `.agents/skills/`: `sympy` and `fluidsim` for exact
+solving and PDE simulation, `pymc`, `pymoo`, `uncertainty-and-units` and
+`statsmodels` for inverse problems, optimisation and uncertainty,
+`dask`, `optimize-for-gpu`, `modal` and `get-available-resources` for scale and
+resource limits, and `matplotlib` plus `scientific-visualization` for figures.
+They give any AI coding agent working on the engine curated guidance for the
+libraries it is built on. They are documentation for agents, not application
+code: the running API never imports them. Provenance, the reasoning per skill,
+the licences and the commands to add more are documented in
+`.agents/README.md`, and the installed versions are pinned by hash in
+`skills-lock.json`.

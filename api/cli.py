@@ -10,8 +10,9 @@ Examples (run from the repository root):
     python3 -m api.cli --model logistic --y0 1.0 --t0 0 --t1 3 \
         --param rate=2 --param capacity=10
     python3 -m api.cli --model system_stiff --y0 1,2 --method Radau --points 500
-    python3 -m api.cli --symbolic "-2*y + sin(t)"
-    python3 -m api.cli --verify
+    python3 -m api.cli --equation "y'' + 2*y' + y = 0" --y0 1,0
+    python3 -m api.cli --list-users
+    python3 -m api.cli --promote you@example.com
 """
 from __future__ import annotations
 
@@ -93,6 +94,57 @@ def _summarize_result(result: Any, full: bool) -> dict[str, Any]:
     return summary
 
 
+def _admin_main(args: argparse.Namespace) -> int:
+    """Local account administration (needs the SQLite database, not the server)."""
+    from api import auth, db  # imported lazily: only admin commands touch the database
+
+    db.init_db()
+    if args.list_users:
+        rows = db.query(
+            "SELECT id, username, email, name, role, banned, token_balance "
+            "FROM users ORDER BY id"
+        )
+        print(json.dumps({"count": len(rows), "users": rows}, indent=2, ensure_ascii=False))
+        return 0
+    if args.promote:
+        user = db.find_user(args.promote)
+        if user is None:
+            print(f"error: no account matches {args.promote!r}", file=sys.stderr)
+            return 1
+        db.set_role(user["id"], "admin")
+        print(json.dumps(
+            {"ok": True, "id": user["id"], "username": user["username"],
+             "email": user["email"], "role": "admin",
+             "message": "This account can now open /admin with unlimited tokens."},
+            indent=2, ensure_ascii=False))
+        return 0
+    if args.demote:
+        user = db.find_user(args.demote)
+        if user is None:
+            print(f"error: no account matches {args.demote!r}", file=sys.stderr)
+            return 1
+        admins = db.query_one("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'") or {"n": 0}
+        if user["role"] == "admin" and int(admins["n"]) <= 1:
+            print("error: this is the last admin account", file=sys.stderr)
+            return 1
+        db.set_role(user["id"], "user")
+        print(json.dumps({"ok": True, "id": user["id"], "role": "user"}, indent=2))
+        return 0
+    if args.set_password:
+        identifier, password = args.set_password
+        if len(password) < 8:
+            print("error: the password must be at least 8 characters", file=sys.stderr)
+            return 1
+        user = db.find_user(identifier)
+        if user is None:
+            print(f"error: no account matches {identifier!r}", file=sys.stderr)
+            return 1
+        db.set_password_hash(user["id"], auth.hash_password(password))
+        print(json.dumps({"ok": True, "id": user["id"], "message": "Password changed"}, indent=2))
+        return 0
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python3 -m api.cli",
@@ -106,13 +158,38 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--points", type=int, default=200, help="output points (2..50000)")
     parser.add_argument("--method", default="RK45", help="RK45 | BDF | Radau | LSODA")
     parser.add_argument("--param", action="append", default=[], metavar="k=v", help="repeatable parameter, e.g. --param rate=2")
-    parser.add_argument("--symbolic", metavar="EXPR", help="solve y' = EXPR symbolically, e.g. '-2*y + sin(t)'")
+    parser.add_argument("--symbolic", metavar="EXPR", help="solve an equation symbolically, e.g. \"y' + 2*y = 0\"")
+    parser.add_argument("--equation", metavar="EQ", help="solve any notation, exact form first then numerical")
     parser.add_argument("--list-models", action="store_true", help="print the 42 model families")
     parser.add_argument("--verify", action="store_true", help="run the offline smoke test for all 42 models")
     parser.add_argument("--full", action="store_true", help="include the full trajectory in the output")
+    parser.add_argument("--list-users", action="store_true", help="list accounts, roles and token balances")
+    parser.add_argument("--promote", metavar="EMAIL|USERNAME", help="make an existing account an admin")
+    parser.add_argument("--demote", metavar="EMAIL|USERNAME", help="remove the admin role from an account")
+    parser.add_argument("--set-password", nargs=2, metavar=("EMAIL|USERNAME", "PASSWORD"),
+                        help="set an account password from the command line")
     args = parser.parse_args(argv)
 
     try:
+        if args.list_users or args.promote or args.demote or args.set_password:
+            return _admin_main(args)
+        if args.equation:
+            from api.equation_input import EquationError, solve_equation
+
+            try:
+                result = solve_equation(
+                    args.equation, t_span=(args.t0, args.t1),
+                    initial=_parse_floats(args.y0) if args.y0 else [],
+                    points=args.points,
+                )
+            except EquationError as exc:
+                print(json.dumps({"status": "failed", "message": str(exc)}, indent=2))
+                return 1
+            if not args.full:
+                result.pop("t", None)
+                result.pop("y", None)
+            print(json.dumps(_sanitize(result), indent=2))
+            return 0 if result["status"] == "success" else 1
         if args.list_models:
             print(json.dumps({"count": len(MODEL_NAMES), "models": MODEL_NAMES}, indent=2))
             return 0

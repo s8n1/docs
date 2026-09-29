@@ -31,6 +31,58 @@ def _admin() -> TestClient:
     return c
 
 
+def test_seeded_admin_exists_and_can_sign_in():
+    c = _client()
+    res = c.post("/api/auth/login", json=ADMIN_LOGIN)
+    assert res.status_code == 200, res.text
+    user = res.json()["user"]
+    assert user["username"] == "admin"
+    assert user["role"] == "admin"
+    assert res.json()["entitlement"]["unlimited"] is True
+
+
+def test_admin_account_is_discoverable_in_the_account_list():
+    admin = _admin()
+    users = admin.get("/api/admin/users").json()
+    assert any(u["username"] == "admin" and u["role"] == "admin" for u in users)
+
+
+def test_find_user_and_set_role_helpers_promote_an_account():
+    _, res = _register(email="owner@example.com", username="owner")
+    assert res.status_code == 200
+    found = db.find_user("owner@example.com")
+    assert found is not None and found["role"] == "user"
+    db.set_role(found["id"], "admin")
+    assert db.find_user("OWNER").get("role") == "admin"
+
+
+def test_password_change_requires_the_current_password():
+    c, res = _register(email="pw@example.com", password="secret12345")
+    assert res.status_code == 200
+    wrong = c.post("/api/account/password", json={
+        "current_password": "nope-nope", "new_password": "brandnew123"})
+    assert wrong.status_code == 401
+    short = c.post("/api/account/password", json={
+        "current_password": "secret12345", "new_password": "short"})
+    assert short.status_code == 422
+    ok = c.post("/api/account/password", json={
+        "current_password": "secret12345", "new_password": "brandnew123"})
+    assert ok.status_code == 200
+    fresh = _client()
+    assert fresh.post("/api/auth/login", json={
+        "identifier": "pw@example.com", "password": "secret12345"}).status_code == 401
+    assert fresh.post("/api/auth/login", json={
+        "identifier": "pw@example.com", "password": "brandnew123"}).status_code == 200
+
+
+def test_anonymous_visitor_cannot_change_a_password():
+    c = _client()
+    c.post("/api/auth/logout", json={})
+    res = c.post("/api/account/password", json={
+        "current_password": "whatever", "new_password": "brandnew123"})
+    assert res.status_code == 401
+
+
 def _register(email="user@example.com", password="secret12345",
               name="Test User", username=None) -> tuple[TestClient, object]:
     c = _client()

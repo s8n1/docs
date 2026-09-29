@@ -125,6 +125,7 @@ npm run setup         # create .venv and install all dependencies
 npm run solve         # standalone CLI solver (no server)
 npm run test:solver   # python solver tests
 npm run test:all      # full python suite (solver + API/UI + independence + packaging)
+npm run lint          # ruff over api/ (config in ruff.toml; needs requirements-dev.txt)
 npm run dev           # Mintlify documentation preview on port 3000
 npm run build         # Mintlify export (static docs build)
 ```
@@ -156,7 +157,7 @@ The product is a monetized web app on top of the solver engine:
   up to 9 for inverse problems, 4 for a symbolic solve, 1 for local
   classification. Beyond the included 500 output points, each extra 1000 points
   costs 1 more token. New accounts get 50 signup tokens; anonymous visitors get a
-  20-token trial session.
+  40-token trial session (10 symbolic solves) tied to their cookie.
 - **Enforcement** — every gated call checks the balance server-side and returns
   HTTP `402` with `code: insufficient_tokens` and `upgrade_url: /pricing` when the
   balance cannot cover the operation. Admin accounts are unlimited.
@@ -191,7 +192,8 @@ The product is a monetized web app on top of the solver engine:
 - `.env`, `data/`, and `*.db` are git-ignored; the SQLite database is never
   served by the app (only `web/` is mounted as static files).
 - Set `ADMIN_PASSWORD` (and optionally `ADMIN_USERNAME`) per deployment instead
-  of relying on the built-in default.
+  of relying on the built-in default, or rotate it from `/account` after signing
+  in (`POST /api/account/password` requires the current password).
 
 ### Environment variables (secrets live in Settings → Environment, never in git)
 
@@ -208,14 +210,108 @@ The product is a monetized web app on top of the solver engine:
 | `ADMIN_EMAIL` | Fixed admin email (default `admin@diffeq.local`) | optional |
 | `DIFFEQ_DB` | Override the SQLite database path (default `data/app.db`) | optional |
 
+### Getting into the admin panel
+
+The admin account is seeded automatically on the first start, so it always
+exists — but its password is never printed in the repository. Use either route:
+
+```bash
+# 1) sign in with the seeded admin username + password (see ADMIN_USERNAME /
+#    ADMIN_PASSWORD, or the defaults in api/db.py), then open /admin
+# 2) make your own account the admin, no password sharing needed:
+python3 -m api.cli --list-users                    # find your account
+python3 -m api.cli --promote you@example.com       # grant the admin role
+python3 -m api.cli --set-password you@example.com  # reset a password
+python3 -m api.cli --demote you@example.com        # take it back (last admin protected)
+```
+
+Once signed in, `/account` has a **change password** card — replace the seeded
+default with one only you know. The admin account is unlimited: it never spends
+tokens and never gets blocked.
+
 ### Quick start for the full product
 
 ```bash
 npm start                 # provisions deps and serves UI + API on 0.0.0.0:8000
-# open http://localhost:8000/auth      → sign in with the admin username + password (username only)
+# open http://localhost:8000/          → write any equation and solve it
+# open http://localhost:8000/auth      → sign in with email/username + password
 # open http://localhost:8000/admin     → every account, token control, orders
 # open http://localhost:8000/pricing   → buy a token pack (ZarinPal / IDPay / USDT-TRC20)
 ```
+
+### Solving an equation in any notation
+
+`POST /solve/equation` accepts the equation the way a human writes it and always
+answers. Every response carries a `kind`; there is never a dead end:
+
+| `kind` | The answer you get |
+| --- | --- |
+| `symbolic` | Closed form `y(t) = …`, sampled into a curve when it can be |
+| `integral` | Exact, with the quadrature left unevaluated (`∫ …`) — evaluating it is exactly what makes `y' = sin(t)·y + t` expensive |
+| `implicit` | The equation integrated once, e.g. the energy integral `∫ dy/√(2(F(y)+C₁)) = t + C₂` for `y'' = f(y)` |
+| `series` | Taylor expansion of the solution at the start of the interval, with the numerical curve alongside |
+| `algebraic` | No derivative in the input (`x^2 - 5x + 6 = 0` → roots, `y = x^2` → solved for `y`) |
+| `numeric` | Verified SciPy integration (RK45 → BDF → Radau) with tolerances and residual |
+
+Both the symbolic sweep and the numerical integration run under hard time,
+memory, step-count and magnitude caps, so a singular equation such as
+`y' = tan(y)` is reported as bounded instead of hanging the request.
+
+```bash
+python3 -m api.cli --equation "y'' + 2*y' + y = 0" --y0 1,0 --t1 5
+```
+
+```text
+-2*y + sin(t)            bare right-hand side of y' = f(t, y)
+y' = -2*y                prime notation
+dy/dt = -2*y             Leibniz notation
+y' + 2*y = 0             implicit form
+2y' + y = 0              implicit multiplication
+y'' + 2*y' + y = 0       second order
+d^2y/dt^2 = -y           second-order Leibniz
+y' = -2y, y(0) = 1       inline initial conditions
+y′ = x² - y              unicode primes, superscripts, Persian digits
+```
+
+### Solver skills
+
+The engine also exposes a registry of independently callable **skills**
+(`api/skills.py`) — one named capability each, with a bilingual description, a
+token price and a single entry point. `GET /skills` is free, so an agent can plan
+before spending anything.
+
+| Skill | What it does |
+| --- | --- |
+| `riccati_reduction` | `y' = a(t)y² + b(t)y + c(t)` → linear second order, so `y' = y² - t` returns the Airy closed form |
+| `power_series` | series solution keeping `C1`/`C2` |
+| `frobenius` | indicial equation + series at a regular singular point, including whether a logarithm is needed |
+| `equilibria_stability` | every equilibrium of a first-order system with its Jacobian classification |
+| `lyapunov_spectrum` | Benettin QR estimate of the full Lyapunov spectrum (Lorenz → `+0.85, 0, −14.5`) |
+| `bifurcation_sweep` | equilibrium branch continued across a parameter, with the stability transitions flagged |
+| `sensitivity_analysis` | variational equations for `∂y(t)/∂y(0)` and the amplification factor |
+| `stiffness_scan` | stiffness ratio along a trajectory plus a method recommendation |
+
+```bash
+curl -s localhost:8000/skills | python3 -m json.tool | head
+curl -s -X POST localhost:8000/skills/match -H 'content-type: application/json' \
+  -d '{"text": "is this system chaotic?"}'
+```
+
+`POST /analyze` suggests a skill locally, and `POST /analyze/enhanced` passes the
+whole catalog to the model in its prompt.
+
+### Agent skills for coding assistants
+
+Twelve third-party Agent Skills are vendored under `.agents/skills/` so any AI
+coding agent working on this repository has curated guidance for the libraries
+the engine is built on and the work it is likely to grow into: `sympy` and
+`fluidsim` (exact solving and PDE simulation), `pymc`, `pymoo`,
+`uncertainty-and-units` and `statsmodels` (inverse problems, optimisation and
+uncertainty), `dask`, `optimize-for-gpu`, `modal` and `get-available-resources`
+(scale and resource limits), and `matplotlib` plus `scientific-visualization`
+(figures). They are documentation for agents, never imported by the running API.
+Provenance, the reasoning per skill and what was left out are in
+`.agents/README.md`; versions are pinned by hash in `skills-lock.json`.
 
 ## Required production configuration
 

@@ -5,14 +5,15 @@ Only structured inputs are accepted; no user code is ever evaluated.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from math import factorial
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import numpy as np
 from scipy.integrate import solve_ivp, solve_bvp
 from scipy.linalg import eigh_tridiagonal
-from scipy.optimize import least_squares, curve_fit
+from scipy.optimize import curve_fit
 from scipy.special import (
     airy as scipy_airy,
     eval_hermite,
@@ -23,14 +24,8 @@ from scipy.special import (
     legendre as legendre_poly,
 )
 from sympy import (
-    Eq, Function, Symbol, dsolve, sympify, Rational, sqrt as sym_sqrt,
-    cos, sin, exp, log, tan, pi, oo, solve as sym_solve,
-    besselj as sym_besselj,
-    hermite as sym_hermite,
-    laguerre as sym_laguerre,
-    chebyshevt as sym_chebyshev,
-    legendre as sym_legendre,
-    airyai as sym_airyai, airybi as sym_airybi,
+    Eq, Function, Symbol, dsolve, sympify, sqrt as sym_sqrt,
+    cos, sin, exp, log, tan, pi, solve as sym_solve,
 )
 from sympy.core.sympify import SympifyError
 
@@ -130,7 +125,7 @@ def _solve_ode(request: SolverRequest, rhs: Callable[[float, np.ndarray], np.nda
         return SolverResult("failed", method, sol.t.tolist(), sol.y.T.tolist(), float("inf"), sol.message)
     vals = sol.y.T
     deriv = np.gradient(vals, sol.t, axis=0) if len(sol.t) > 2 else vals * 0
-    expected = np.vstack([bounded_rhs(t, y) for t, y in zip(sol.t, vals)])
+    expected = np.vstack([bounded_rhs(t, y) for t, y in zip(sol.t, vals, strict=False)])
     res = float(np.max(np.abs(deriv - expected))) if len(sol.t) > 2 else 0.0
     return SolverResult("success", method, sol.t.tolist(), vals.tolist(), res, sol.message)
 
@@ -552,7 +547,6 @@ def _solve_pde(req: SolverRequest, pde_type: str) -> SolverResult:
 
     elif pde_type == "laplace":
         # Static: iterate until convergence on spatial grid
-        u_spatial = ic.copy().reshape(-1) if p.get("ny", 0) == 0 else ic[:nx]
         max_iter = int(p.get("max_iter", 5000))
         tol = p.get("tolerance", 1e-6)
         ny_grid = int(p.get("ny", nx))
@@ -606,7 +600,6 @@ def _solve_boundary_value(req: SolverRequest) -> SolverResult:
     p = req.parameters
     bc_left, bc_right = p.get("bc_left", 0.0), p.get("bc_right", 0.0)
     a, b = req.t_span
-    n_col = int(p.get("n_col", 50))
     x_mesh = np.linspace(a, b, max(int(req.parameters.get("mesh_points", 20)), 5))
     ode_type = p.get("ode_type", 0)  # 0: y'' + k^2*y = 0
     k = p.get("k", np.pi)
@@ -779,17 +772,23 @@ def solve_builtin(request: SolverRequest) -> SolverResult:
 # Symbolic first-order (backward compat)
 # ---------------------------------------------------------------------------
 def try_symbolic_first_order(equation: str, variable: str = "y", independent: str = "t") -> str | None:
-    if len(equation) > 2_000 or any(tok in equation for tok in ["__", "import", "lambda", ";", "[", "]", "{"]):
-        return None
-    if not variable.isidentifier() or not independent.isidentifier():
-        return None
+    """Exact solution for whatever notation the caller wrote.
+
+    Accepts a bare right-hand side (``-2*y + sin(t)``) as well as full equations
+    (``y' = -2*y``, ``dy/dt = -2*y``, ``y' + 2*y = 0``). Returns ``None`` when the
+    text is unsafe or has no closed form.
+    """
+    from api.equation_input import EquationError, solve_equation  # avoid a cycle at import time
+
     try:
-        x = Symbol(independent)
-        y = Function(variable)(x)
-        expr = sympify(equation, locals={"y": y, independent: x, "sin": sin, "cos": cos, "exp": exp, "log": log, "sqrt": sym_sqrt})
-        return str(dsolve(Eq(y.diff(x), expr), y))
+        result = solve_equation(equation, variable, independent, points=8, symbolic_only=True)
+    except EquationError:
+        return None
     except (SympifyError, ValueError, TypeError, NotImplementedError):
         return None
+    if result.get("status") == "success" and result.get("solution"):
+        return str(result["solution"])
+    return None
 
 # ---------------------------------------------------------------------------
 # Metadata and verification

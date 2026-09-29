@@ -11,7 +11,8 @@ The solver engine is wrapped in a commercial layer: password accounts (email **o
 
 ## Accounts & roles / حساب‌ها و نقش‌ها
 
-- **Fixed admin / ادمین ثابت:** `db.init_db()` seeds the admin account from `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL` (the built-in defaults live in `api/db.py` and are never printed here). It signs in with **username + password only** and never needs an email confirmation or phone number.
+- **Fixed admin / ادمین ثابت:** `db.init_db()` seeds the admin account from `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL` (the built-in defaults live in `api/db.py` and are never printed here). It signs in with **username + password only** and never needs an email confirmation or phone number. To reach the panel without sharing that password, promote your own account from the command line: `python3 -m api.cli --list-users`, `--promote <email|username>`, `--set-password <email|username> <password>`, `--demote <email|username>`.
+- **Change password / تغییر رمز:** `POST /api/account/password` (current + new password) works for every account, including the seeded admin, from the `/account` page.
 - **Register / ثبت‌نام:** `/api/auth/register` — email + password + optional username; every new account receives **50 signup tokens** and the role `user`.
 - **Login / ورود:** `/api/auth/login` accepts `identifier` (email **or** username) + password; the legacy `email` field still works. Sessions are opaque random tokens in an HttpOnly, SameSite=Lax cookie (`de_session`, 30 days).
 - **Passwords / رمز عبور:** PBKDF2-HMAC-SHA256 (200k iterations, per-user salt). Minimum length 8.
@@ -33,14 +34,22 @@ Time plays **no** role: token packs never expire. Each operation costs tokens ac
 | Eigenvalue (Sturm–Liouville), delay equations | 7 |
 | Laplace/Poisson PDE, reaction–diffusion | 8 |
 | Inverse (optimization) problems | 9 |
-| Symbolic solve `/solve/symbolic` | 4 |
+| Free-form solve `/solve/equation` · symbolic `/solve/symbolic` | 4 |
 | Local classification `/analyze` · enhanced `/analyze/enhanced` | 1 · 2 |
+| Skills: `power_series`, `equilibria_stability`, `stiffness_scan` | 3 |
+| Skills: `riccati_reduction`, `frobenius`, `sensitivity_analysis` | 3 · 4 |
+| Skills: `lyapunov_spectrum` · `bifurcation_sweep` | 5 · 6 |
+| Skill match `/skills/match` (same price as local classification) | 1 |
+
+Free-form intake (`api/equation_input.py`) accepts a bare right-hand side, `y' = …`, `dy/dt = …`, implicit forms (`y' + 2y = 0`), implicit multiplication (`2y'`), second order (`y'' + 2y' + y = 0`), second-order Leibniz (`d^2y/dt^2`), inline initial conditions (`y' = -2y, y(0) = 1`) and unicode math (′ ″ ² ³ π × − and Persian digits). Presentation is normalised into SymPy and an answer is always returned, tagged with a `kind`: `symbolic` (closed form `y(t) = …`), `integral` (exact with the quadrature left unevaluated), `implicit` (the equation integrated once, e.g. the energy integral of `y'' = f(y)`), `series` (Taylor expansion around the start of the interval) or `algebraic` (input with no derivative: roots of `x^2 - 5x + 6 = 0`, or `y = x^2` solved for `y`). SciPy RK45 → BDF → Radau supplies the numerical curve when the exact answer cannot be sampled. The symbolic sweep and the numerical integration both run under hard time, memory, step-count and magnitude caps. Only an allowlisted mathematical vocabulary reaches SymPy; nothing is ever executed as code.
+
+ورودی آزاد (فایل `api/equation_input.py`) همهٔ نمادها را می‌پذیرد: سمت راست معادله، `y' = …`، `dy/dt = …`، فرم ضمنی، ضرب ضمنی، مرتبهٔ دوم، `d^2y/dt^2`، شرایط اولیه داخل متن و ریاضی یونیکد. همیشه یک جواب برمی‌گردد و نوع آن در فیلد `kind` می‌آید: `symbolic` (فرم بسته)، `integral` (دقیق با انتگرال بازمانده)، `implicit` (یک بار انتگرال‌گیری‌شده، مثل انتگرال انرژی برای `y'' = f(y)`)، `series` (بسط تیلور در ابتدای بازه) یا `algebraic` (ورودی بدون مشتق). اگر جواب دقیق قابل نمونه‌گیری نباشد، منحنی عددی SciPy در کنار آن می‌آید؛ حل نمادین و حل عددی هر دو با محدودیت زمان، حافظه و تعداد گام اجرا می‌شوند.
 
 Output resolution: every solve includes 500 points; each extra 1000 points adds 1 token. The per-model prices are editable from the admin panel through the `model_token_costs` setting (JSON object, e.g. `{"laplace_pde": 10}`).
 
 زمان هیچ نقشی ندارد: پک‌های توکن منقضی نمی‌شوند. هر عملیات بر اساس سختی، توکن مصرف می‌کند (جدول بالا) و قیمت هر مدل از پنل ادمین با تنظیم `model_token_costs` قابل تغییر است.
 
-**Enforcement / اعمال محدودیت:** every gated request checks the balance server-side before running (`plans.check_access`). A request the balance cannot cover returns HTTP `402` with `code: insufficient_tokens`, `upgrade: true`, and `upgrade_url: /pricing`. Accounts start with 50 tokens; anonymous visitors get a 20-token trial tied to their session cookie.
+**Enforcement / اعمال محدودیت:** every gated request checks the balance server-side before running (`plans.check_access`). A request the balance cannot cover returns HTTP `402` with `code: insufficient_tokens`, `upgrade: true`, and `upgrade_url: /pricing`. Accounts start with 50 tokens; anonymous visitors get a 40-token trial (about ten free-form solves) tied to their session cookie, and the UI turns that limit into a signup prompt instead of a dead end.
 
 ## Balances & ledger / موجودی و دفتر کل
 
@@ -85,16 +94,22 @@ All admin routes live under `/api/admin/*` and require the admin role server-sid
 - **Cookies / کوکی:** sessions are `HttpOnly`, `SameSite=Lax`, and `Secure` automatically whenever the request arrives over HTTPS.
 - **No wildcard CORS / بدون CORS باز:** the API grants no cross-origin access, so third-party sites cannot script it from a browser.
 - **No secrets in git / بدون راز در گیت:** `.env`, `data/`, and `*.db` are git-ignored, and the SQLite database is never served by the app (only `web/` is mounted).
-- **Rotate the admin password / تغییر رمز ادمین:** set `ADMIN_PASSWORD` (and `ADMIN_USERNAME`) per deployment instead of relying on the built-in default.
+- **Rotate the admin password / تغییر رمز ادمین:** set `ADMIN_PASSWORD` (and `ADMIN_USERNAME`) per deployment instead of relying on the built-in default, or change it from `/account` while signed in (`POST /api/account/password`). `python3 -m api.cli --set-password <account>` resets any account locally.
 
 ## API summary / خلاصهٔ API
 
 ```text
 POST /api/auth/register | /login | /logout      (login accepts email or username)
 GET  /api/me                     → user + token entitlement (balance, prices)
+POST /api/account/password       → change the signed-in account's password
 GET  /api/my-tokens              → balance + token history
 GET  /api/plans                  → token packs
 GET  /api/my-orders              → own orders
+POST /solve/equation             → free-form ODE (any notation) → always an answer
+                                   (symbolic · integral · implicit · series · algebraic · numeric)
+GET  /skills                     → the skills catalog (free)
+POST /skills/match               → rank skills against a plain-language request
+POST /skills/{skill_id}          → run one named skill (priced per skill)
 POST /api/payment/start          → {gateway, redirect_url | wallet, order_id}
 GET  /api/payment/zarinpal/callback  (Authority, Status)
 GET  /api/payment/idpay/callback     (id, order_id)

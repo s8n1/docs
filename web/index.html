@@ -1,44 +1,198 @@
 <!doctype html>
-<html lang="en" dir="ltr">
+<html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DiffEQ Engine — Differential Equation Solver</title>
+  <title>DiffEQ Engine — موتور دیف‌ای‌کیو · حل‌کنندهٔ معادلات دیفرانسیل</title>
+  <meta name="description" content="DiffEQ Engine — حل‌کنندهٔ نمادین و عددی معادلات دیفرانسیل: ۴۲ خانوادهٔ مدل، حل دقیق یا عددی، نمودار و بررسی باقی‌مانده." />
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%E2%88%AB%3C/text%3E%3C/svg%3E" />
 </head>
-<body>
+<body data-page="solver">
   <header class="topbar">
-    <div class="brand">
+    <a class="brand" href="/">
       <span class="brand-mark">∫</span>
-      <div>
-        <h1 id="brand-title">DiffEQ Engine</h1>
-        <p id="brand-sub">Symbolic + numerical differential equation solver · 42 model families</p>
-      </div>
-    </div>
+      <span class="brand-text">
+        <h1 id="brand-title">موتور دیف‌ای‌کیو</h1>
+        <p id="brand-sub">حل‌کنندهٔ نمادین و عددی معادلات دیفرانسیل · ۴۲ خانوادهٔ مدل</p>
+      </span>
+    </a>
+    <nav class="top-nav">
+      <a href="#workspace" data-i18n="nav-solve">حل‌کننده</a>
+      <a href="#examples" data-i18n="nav-examples">مثال‌ها</a>
+      <a href="/pricing" data-i18n="nav-pricing">پک‌های توکن</a>
+      <a href="/account" data-i18n="nav-account">حساب کاربری</a>
+    </nav>
     <div class="lang-toggle" role="group" aria-label="Language">
-      <button type="button" id="lang-en" class="lang-btn active" data-lang="en">EN</button>
-      <button type="button" id="lang-fa" class="lang-btn" data-lang="fa">فارسی</button>
+      <button type="button" id="lang-en" class="lang-btn" data-lang="en">EN</button>
+      <button type="button" id="lang-fa" class="lang-btn active" data-lang="fa">فارسی</button>
     </div>
     <div id="auth-area" class="auth-area"></div>
   </header>
 
-  <main class="wrap">
+  <!-- ============================ HERO ============================ -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <span class="hero-tag" data-i18n="hero-tag">۴۲ خانوادهٔ مدل · حل دقیق + عددی</span>
+        <h2 class="hero-title">
+          <span data-i18n="hero-line1">معادلهٔ دیفرانسیل را بنویس،</span>
+          <span class="hero-accent" data-i18n="hero-line2">جوابِ دقیق را بگیر.</span>
+        </h2>
+        <p class="hero-sub" data-i18n="hero-sub">
+          هر نمادی که راحت‌ترید بنویسید — <code>y′ = -2y</code>، <code>dy/dt = -2y</code>،
+          <code>y″ + 2y′ + y = 0</code> یا فقط سمت راست معادله. موتور اول جواب دقیق را با
+          SymPy پیدا می‌کند و اگر جواب بسته‌ای وجود نداشت، همان معادله را با SciPy عددی حل
+          می‌کند و نمودار و باقی‌مانده را نشان می‌دهد.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href="#workspace" data-i18n="cta-start">شروع حل</a>
+          <a class="btn btn-lg" href="/auth?returnTo=/account" data-i18n="cta-account">ساخت حساب رایگان</a>
+        </div>
+        <ul class="hero-stats">
+          <li><b>42</b><span data-i18n="stat-families">خانوادهٔ مدل</span></li>
+          <li><b>∞</b><span data-i18n="stat-notation">نمادهای قابل قبول</span></li>
+          <li><b>50</b><span data-i18n="stat-tokens">توکن هدیه</span></li>
+          <li><b>0</b><span data-i18n="stat-keys">کلید بیرونی لازم</span></li>
+        </ul>
+      </div>
+      <div class="hero-card">
+        <div class="hero-card-head">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="hero-card-name">solver.input</span>
+        </div>
+        <pre class="hero-code">y'' + 2*y' + y = 0
+y(0) = 1,  y'(0) = 0</pre>
+        <div class="hero-arrow">↓</div>
+        <div class="hero-out">
+          <div class="hero-out-label" data-i18n="hero-out-label">جواب دقیق</div>
+          <code>y(t) = (t + 1)·e<sup>−t</sup></code>
+          <div class="hero-out-meta">
+            <span class="chip ok" data-i18n="hero-verified">باقی‌مانده: 0</span>
+            <span class="chip info">symbolic</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <main class="wrap" id="workspace">
     <div id="banner-connecting" class="banner banner-warn hidden"></div>
     <div id="banner-error" class="banner banner-error hidden"></div>
 
     <nav class="tabs" id="tabs" role="tablist">
-      <button type="button" class="tab active" data-tab="catalog" role="tab">Model solver</button>
-      <button type="button" class="tab" data-tab="freeform" role="tab">Free equation</button>
+      <button type="button" class="tab active" data-tab="freeform" role="tab" data-i18n="tabs-free">معادلهٔ آزاد</button>
+      <button type="button" class="tab" data-tab="catalog" role="tab" data-i18n="tabs-model">۴۲ خانوادهٔ مدل</button>
+      <button type="button" class="tab" data-tab="skills" role="tab" data-i18n="tabs-skills"
+              onclick="loadSkills().then(renderSkillsPanel)">مهارت‌های حل</button>
     </nav>
 
+    <!-- ============ Free-form equation tab (primary) ============ -->
+    <section id="panel-freeform" class="panel" role="tabpanel">
+      <div class="card solver-card">
+        <h2 data-i18n="free-title">معادله را بنویسید</h2>
+        <p class="hint" id="free-hint" data-i18n="free-hint">
+          هر شکل نوشتنی قبول است: سمت راست معادله (<code>-2*y + sin(t)</code>)،
+          <code>y′ = ...</code>، <code>dy/dt = ...</code>، فرم ضمنی (<code>y′ + 2y = 0</code>)،
+          مرتبهٔ دوم (<code>y″ + 2y′ + y = 0</code>) و حتی شرایط اولیه داخل متن
+          (<code>y′ = -2y, y(0) = 1</code>).
+        </p>
+
+        <label class="field">
+          <span class="lbl" data-i18n="free-eq-label">معادله</span>
+          <input type="text" id="free-eq" class="eq-input" placeholder="y' + 2*y = 0" spellcheck="false" autocomplete="off" />
+        </label>
+
+        <div class="param-row grid3">
+          <label class="field">
+            <span class="lbl" data-i18n="free-t0">آغاز بازه (t₀)</span>
+            <input type="number" step="any" id="eq-t0" value="0" />
+          </label>
+          <label class="field">
+            <span class="lbl" data-i18n="free-t1">پایان بازه (t₁)</span>
+            <input type="number" step="any" id="eq-t1" value="5" />
+          </label>
+          <label class="field">
+            <span class="lbl" data-i18n="points">تعداد نقاط خروجی</span>
+            <input type="number" min="2" max="2000" id="eq-points" value="200" />
+          </label>
+        </div>
+
+        <div class="param-row grid3">
+          <label class="field">
+            <span class="lbl" id="free-dep-label" data-i18n="free-dep-label">متغیر وابسته (y)</span>
+            <input type="text" id="free-dep" value="y" />
+          </label>
+          <label class="field">
+            <span class="lbl" id="free-ind-label" data-i18n="free-ind-label">متغیر مستقل (t)</span>
+            <input type="text" id="free-ind" value="t" />
+          </label>
+          <label class="field">
+            <span class="lbl" id="free-y0-label" data-i18n="free-y0-label">شرایط اولیه y(t₀), y′(t₀)</span>
+            <input type="text" id="free-y0" placeholder="1, 0" autocomplete="off" />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn btn-primary btn-lg" id="btn-free-solve" data-i18n="btn-solve-eq">⚡ حل معادله</button>
+          <button type="button" class="btn" id="btn-free-classify" data-i18n="btn-classify">تشخیص نوع معادله</button>
+          <a class="btn btn-small" href="/pricing" data-i18n="nav-pricing">پک‌های توکن</a>
+          <span class="hint" id="cost-hint"></span>
+        </div>
+      </div>
+
+      <div id="free-res" class="solution hidden"></div>
+
+      <div class="examples" id="examples">
+        <h3 data-i18n="examples-title">یک مثال را امتحان کنید</h3>
+        <div class="example-chips" id="example-chips"></div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="about-title">موتور</h2>
+        <ul class="about">
+          <li data-i18n="about1">SymPy برای جواب‌های دقیق خانواده‌های معادلات دیفرانسیل.</li>
+          <li data-i18n="about2">SciPy با روش‌های RK45 / BDF / Radau / LSODA برای سیستم‌های عددی، با انتخاب خودکار روش برای مسائل سخت.</li>
+          <li data-i18n="about3">حل‌کننده‌های تفاضل محدود برای معادلات حرارت، موج، جابه‌جایی، لاپلاس و پواسون.</li>
+          <li data-i18n="about4">مسائل مقدار مرزی، مقدارهای ویژهٔ استورم–لیوویل، معادلات تأخیری و مسائل معکوس.</li>
+          <li data-i18n="about5">هر نتیجه با بررسی باقی‌مانده و فرادادهٔ اعتبارسنجی همراه است. هیچ ورودی کاربری هرگز به‌صورت کد اجرا نمی‌شود.</li>
+          <li data-i18n="about6">پک‌های توکن منقضی نمی‌شوند: هزینهٔ هر ابزار و مدل بر اساس سختی از توکن‌های شما کم می‌شود.</li>
+          <li data-i18n="about7">هیچ ورودی‌ای بی‌جواب نمی‌ماند: فرم بسته، انتگرال بازمانده، فرم ضمنی (انتگرال انرژی)، سری تیلور، ریشهٔ جبری یا حل عددی معتبر — و هر حل با محدودیت زمان، حافظه و تعداد گام اجرا می‌شود.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ Skills tab ============ -->
+    <section id="panel-skills" class="panel hidden" role="tabpanel">
+      <div class="card">
+        <h2 data-i18n="skills-title">مهارت‌های حل‌کننده</h2>
+        <p class="skills-intro" data-i18n="skills-intro">
+          هر مهارت یک توانایی مشخص است که موتور و لایهٔ هوش مصنوعی می‌توانند آن را با نام صدا بزنند.
+        </p>
+        <div class="skill-match">
+          <input id="skill-query" type="text" data-i18n-ph="skills-ph"
+                 placeholder="مثلاً: این دستگاه آشوبی است؟" autocomplete="off"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();matchSkillRequest();}">
+          <button type="button" class="btn" id="btn-skill-match" data-i18n="skills-match"
+                  onclick="matchSkillRequest()">پیشنهاد مهارت</button>
+        </div>
+        <div id="skill-matches" class="skill-matches"></div>
+      </div>
+      <div class="card">
+        <div id="skill-grid" class="skill-grid">
+          <div class="sol-note" data-i18n="skills-loading">در حال بارگذاری…</div>
+        </div>
+      </div>
+      <div id="skill-res" class="solution hidden"></div>
+    </section>
+
     <!-- ============ Model catalog tab ============ -->
-    <section id="panel-catalog" class="panel" role="tabpanel">
+    <section id="panel-catalog" class="panel hidden" role="tabpanel">
       <div class="grid">
         <div class="card">
-          <h2 id="cat-model-title">1 · Choose a model family</h2>
+          <h2 id="cat-model-title" data-i18n="cat-model-title">۱ · خانوادهٔ مدل را انتخاب کنید</h2>
           <label class="field">
-            <span class="lbl" data-i18n="search">Search models…</span>
+            <span class="lbl" data-i18n="search">جست‌وجوی مدل‌ها…</span>
             <input type="search" id="model-search" autocomplete="off" />
           </label>
           <label class="field">
@@ -48,15 +202,15 @@
         </div>
 
         <div class="card">
-          <h2 id="cat-param-title">2 · Configure inputs</h2>
+          <h2 id="cat-param-title" data-i18n="cat-param-title">۲ · ورودی‌ها را تنظیم کنید</h2>
 
           <div class="param-row grid2">
             <label class="field">
-              <span class="lbl" data-i18n="t0">t start (t₀)</span>
+              <span class="lbl" data-i18n="t0">آغاز بازه (t₀)</span>
               <input type="number" step="any" id="p-t0" value="0" />
             </label>
             <label class="field">
-              <span class="lbl" data-i18n="t1">t end (t₁)</span>
+              <span class="lbl" data-i18n="t1">پایان بازه (t₁)</span>
               <input type="number" step="any" id="p-t1" value="1" />
             </label>
           </div>
@@ -66,34 +220,34 @@
 
           <div id="grid-profile" class="hidden">
             <label class="field">
-              <span class="lbl" data-i18n="profile">Initial spatial profile</span>
+              <span class="lbl" data-i18n="profile">پروفایل اولیهٔ فضایی</span>
               <select id="p-profile">
-                <option value="sine" data-i18n="profile-sine">sine bump</option>
-                <option value="gauss">gaussian bump</option>
-                <option value="flat">constant</option>
+                <option value="sine" data-i18n="profile-sine">برآمدگی سینوسی</option>
+                <option value="gauss" data-i18n="profile-gauss">برآمدگی گاوسی</option>
+                <option value="flat" data-i18n="profile-flat">ثابت</option>
               </select>
             </label>
             <label class="field">
-              <span class="lbl" data-i18n="amplitude">Amplitude</span>
+              <span class="lbl" data-i18n="amplitude">دامنه</span>
               <input type="number" step="any" id="p-amplitude" value="1" />
             </label>
-            <p class="hint" data-i18n="profile-hint">Spatial grid values are generated from the profile.</p>
+            <p class="hint" data-i18n="profile-hint">مقادیر شبکهٔ فضایی از روی پروفایل ساخته می‌شوند.</p>
           </div>
 
           <div class="param-row grid3">
             <label class="field">
-              <span class="lbl">Method</span>
+              <span class="lbl" data-i18n="method">روش</span>
               <select id="p-method">
-                <option value="auto">auto</option>
+                <option value="auto" data-i18n="method-auto">خودکار</option>
                 <option value="RK45">RK45</option>
-                <option value="BDF">BDF (stiff)</option>
-                <option value="Radau">Radau (stiff)</option>
+                <option value="BDF">BDF (سخت)</option>
+                <option value="Radau">Radau (سخت)</option>
                 <option value="LSODA">LSODA</option>
               </select>
             </label>
             <label class="field">
-              <span class="lbl" data-i18n="points">Output points</span>
-              <input type="number" min="2" max="2000" id="p-points" value="200" />
+              <span class="lbl" data-i18n="points">تعداد نقاط خروجی</span>
+              <input type="number" min="2" max="2000" id="p-points-catalog" value="200" />
             </label>
             <label class="field">
               <span class="lbl">rtol</span>
@@ -102,17 +256,16 @@
           </div>
 
           <div class="actions">
-            <button type="button" class="btn btn-primary" id="btn-solve">⚡ Solve</button>
-            <button type="button" class="btn" id="btn-example">Try an example</button>
-            <a class="btn btn-small" href="/pricing">Token packs</a>
+            <button type="button" class="btn btn-primary" id="btn-solve" data-i18n="btn-solve">⚡ حل کن</button>
+            <button type="button" class="btn" id="btn-example" data-i18n="btn-example">یک مثال امتحان کن</button>
+            <span class="hint" id="cost-hint-catalog"></span>
           </div>
-          <div class="hint" id="cost-hint"></div>
         </div>
       </div>
 
-      <section id="results" class="card hidden">
+      <section id="results" class="solution hidden">
         <div class="result-head">
-          <h2 data-i18n="result-title">Solution</h2>
+          <h2 data-i18n="result-title">جواب</h2>
           <span class="chips" id="res-chips"></span>
         </div>
         <div id="res-symbolic" class="symbolic hidden"></div>
@@ -120,56 +273,22 @@
         <div class="plot-wrap hidden" id="plot-wrap"><canvas id="plot" width="900" height="380"></canvas><div id="plot-legend" class="legend"></div></div>
         <div class="res-grid" id="res-grid"></div>
         <div class="meta">
-          <h3 data-i18n="meta-title">Solver metadata</h3>
+          <h3 data-i18n="meta-title">فرادادهٔ حل‌کننده</h3>
           <pre id="res-meta"></pre>
         </div>
       </section>
     </section>
-
-    <!-- ============ Free equation tab ============ -->
-    <section id="panel-freeform" class="panel hidden" role="tabpanel">
-      <div class="card">
-        <h2 data-i18n="free-title">Solve a first-order ODE symbolically</h2>
-        <p class="hint" data-i18n="free-hint">Write only the right-hand side f(t, y) of y' = f(t, y). Examples: <code>-y</code>, <code>-2*y + sin(t)</code>, <code>y*(1 - y/10)</code>.</p>
-        <div class="free-form">
-          <label class="field grow">
-            <span class="lbl">y′ = f(t, y)</span>
-            <input type="text" id="free-eq" placeholder="-2*y + sin(t)" spellcheck="false" />
-          </label>
-          <label class="field">
-            <span class="lbl">dependent (y)</span>
-            <input type="text" id="free-dep" value="y" />
-          </label>
-          <label class="field">
-            <span class="lbl">independent (t)</span>
-            <input type="text" id="free-ind" value="t" />
-          </label>
-        </div>
-        <div class="actions">
-          <button type="button" class="btn btn-primary" id="btn-free-solve">Solve symbolically</button>
-          <button type="button" class="btn" id="btn-free-classify">Classify (local)</button>
-        </div>
-        <div id="free-res" class="result-pane hidden"></div>
-      </div>
-
-      <div class="card">
-        <h2 data-i18n="about-title">Engine</h2>
-        <ul class="about">
-          <li data-i18n="about1">SymPy for exact solutions of ODE families.</li>
-          <li data-i18n="about2">SciPy RK45 / BDF / Radau / LSODA for numerical systems, with automatic BDF for stiff problems.</li>
-          <li data-i18n="about3">Finite-difference solvers for heat, wave, advection, Laplace and Poisson PDEs.</li>
-          <li data-i18n="about4">Boundary value problems, Sturm–Liouville eigenvalues, delay equations, and inverse (curve-fit) problems.</li>
-          <li data-i18n="about5">Every result carries a residual check and verification metadata. No user input is ever executed as code.</li>
-          <li data-i18n="about6">Token packs never expire: each tool and model costs tokens by difficulty, and your balance is shown in the header.</li>
-        </ul>
-      </div>
-    </section>
   </main>
 
   <footer class="foot">
-    <span id="foot-health">API: <b id="health-state">checking…</b> · models: <b id="health-models">–</b></span>
+    <span id="foot-health">API: <b id="health-state">…</b> · <b id="health-models">–</b> <span data-i18n="foot-models">مدل</span></span>
+    <span class="foot-links">
+      <a href="/pricing" data-i18n="nav-pricing">پک‌های توکن</a>
+      <a href="/auth" data-i18n="nav-login">ورود</a>
+    </span>
   </footer>
 
+  <div class="toast hidden" id="toast"></div>
   <script src="/static/app.js"></script>
 </body>
 </html>

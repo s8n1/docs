@@ -345,6 +345,53 @@ async function initAccountPage() {
   buy.href = "/pricing";
   if (!ent.unlimited) card.appendChild(buy);
 
+  const adminLink = el("a", "btn", PLANG === "fa" ? "پنل مدیریت" : "Admin panel");
+  adminLink.href = "/admin";
+  if (me.user.role === "admin") card.appendChild(adminLink);
+
+  /* Password rotation — the seeded admin password should be replaced. */
+  const passCard = el("div", "card");
+  passCard.appendChild(el("h2", "", PLANG === "fa" ? "تغییر رمز عبور" : "Change password"));
+  if (me.user.role === "admin") {
+    passCard.appendChild(el("div", "admin-note", PLANG === "fa"
+      ? "شما با دسترسی مدیر وارد شده‌اید. اگر هنوز از رمز پیش‌فرض استفاده می‌کنید، همین حالا آن را عوض کنید."
+      : "You are signed in as an admin. If you still use the default password, replace it now."));
+  }
+  const curField = el("label", "field");
+  curField.appendChild(el("span", "lbl", PLANG === "fa" ? "رمز عبور فعلی" : "Current password"));
+  const curInput = el("input");
+  curInput.type = "password";
+  curInput.autocomplete = "current-password";
+  curField.appendChild(curInput);
+  const newField = el("label", "field");
+  newField.appendChild(el("span", "lbl", PLANG === "fa" ? "رمز عبور جدید (حداقل ۸ کاراکتر)" : "New password (min 8 characters)"));
+  const newInput = el("input");
+  newInput.type = "password";
+  newInput.autocomplete = "new-password";
+  newField.appendChild(newInput);
+  const passMsg = el("div", "hint");
+  const passBtn = el("button", "btn btn-primary", PLANG === "fa" ? "ذخیرهٔ رمز جدید" : "Save new password");
+  passBtn.onclick = async () => {
+    passMsg.textContent = "";
+    passBtn.disabled = true;
+    try {
+      await papi("/api/account/password", {
+        current_password: curInput.value,
+        new_password: newInput.value,
+      });
+      passMsg.textContent = PLANG === "fa" ? "✓ رمز عبور به‌روز شد" : "✓ Password updated";
+      curInput.value = "";
+      newInput.value = "";
+    } catch (err) {
+      passMsg.textContent = `✗ ${err.message}`;
+    } finally {
+      passBtn.disabled = false;
+    }
+  };
+  const passActions = el("div", "actions");
+  passActions.append(passBtn, passMsg);
+  passCard.append(curField, newField, passActions);
+
   /* Token costs by difficulty */
   const costCard = el("div", "card");
   costCard.appendChild(el("h2", "", PLANG === "fa" ? "هزینهٔ ابزارها و مدل‌ها" : "Tool & model costs"));
@@ -427,7 +474,7 @@ async function initAccountPage() {
     box.prepend(b);
   }
 
-  box.append(card, costCard, ledgerCard, ordersCard);
+  box.append(card, passCard, costCard, ledgerCard, ordersCard);
 }
 
 /* ---------- Admin page ---------- */

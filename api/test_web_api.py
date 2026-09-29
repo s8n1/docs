@@ -151,3 +151,81 @@ def test_symbolic_endpoint():
 def test_symbolic_rejects_code_tokens():
     res = client.post("/solve/symbolic", json={"equation": "__import__('os').system('id')"})
     assert res.status_code == 422
+
+
+def test_symbolic_accepts_full_equations():
+    res = client.post("/solve/symbolic", json={"equation": "y' + 2*y = 0"})
+    assert res.status_code == 200
+    assert "exp" in res.json()["solution"]
+
+
+def test_equation_endpoint_accepts_any_notation():
+    for text, initial in [
+        ("-2*y + sin(t)", []),
+        ("dy/dt = -2*y", [1.0]),
+        ("y'' + 2*y' + y = 0", [1.0, 0.0]),
+        ("y' = -2y, y(0) = 1", []),
+    ]:
+        res = client.post("/solve/equation", json={
+            "equation": text, "t_span": [0.0, 3.0], "initial_values": initial, "points": 40,
+        })
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert data["status"] == "success", text
+        assert data["solution"]
+        assert len(data["t"]) >= 2
+
+
+def test_equation_endpoint_falls_back_to_series_then_numerics():
+    res = client.post("/solve/equation", json={
+        "equation": "y' = y^2 + t^2", "t_span": [0.0, 1.0], "initial_values": [0.5], "points": 40,
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["kind"] in {"series", "numeric", "integral", "implicit", "symbolic"}
+    assert data["solution"]
+    assert data["residual_max"] is not None
+
+
+def test_equation_endpoint_answers_a_plain_relation():
+    """``y = x^2`` is not a differential equation, but it is still an answer."""
+    res = client.post("/solve/equation", json={"equation": "y = x^2"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["kind"] == "algebraic"
+    assert data["solution"] == "y = x**2"
+
+
+def test_equation_endpoint_explains_bad_input():
+    res = client.post("/solve/equation", json={"equation": "y' = mystery(t)"})
+    assert res.status_code == 422
+    assert "unknown symbol" in res.json()["detail"].lower()
+
+
+def test_equation_endpoint_reports_the_model_guess():
+    res = client.post("/solve/equation", json={"equation": "y' = y*(1 - y/10)"})
+    assert res.status_code == 200
+    assert res.json()["model_guess"] in {"logistic", "system_nonlinear", "separable"}
+
+
+def test_equation_endpoint_charges_anonymously_and_reports_balance():
+    res = client.post("/solve/equation", json={"equation": "-y", "points": 20})
+    assert res.status_code == 200
+    ent = res.json()["entitlement"]
+    assert ent["tokens_charged"] > 0
+    assert isinstance(ent["tokens"], int)
+
+
+def test_solver_payloads_are_strict_json():
+    """Browsers reject Infinity/NaN, so the API must never emit them."""
+    from api.main import _sanitize
+
+    cleaned = _sanitize({"a": float("inf"), "b": [float("nan"), 1.5], "c": {"d": float("-inf")}})
+    assert cleaned == {"a": None, "b": [None, 1.5], "c": {"d": None}}
+    res = client.post("/solve/equation", json={
+        "equation": "y' = y^2 - t", "t_span": [0.0, 1.0], "initial_values": [0.5], "points": 20,
+    })
+    assert res.status_code == 200
+    json.loads(res.text)

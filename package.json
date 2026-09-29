@@ -12,7 +12,8 @@
     "setup": "sh scripts/setup.sh",
     "solve": "python3 -m api.cli",
     "test:solver": "python3 -m pytest api/test_solver_core.py",
-    "test:all": "python3 -m pytest api/ -q"
+    "test:all": "python3 -m pytest api/ -q",
+    "lint": ".venv/bin/python -m ruff check api/"
   },
   "devDependencies": {
     "mintlify": "^4.2.788"

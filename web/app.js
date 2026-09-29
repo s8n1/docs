@@ -3,67 +3,146 @@
 
 /* ============================= i18n ============================= */
 const I18N = {
-  "brand-title": { en: "DiffEQ Engine", fa: "موتور دیف‌ایکیو" },
+  "brand-title": { en: "DiffEQ Engine", fa: "موتور دیف‌ای‌کیو" },
   "brand-sub": { en: "Symbolic + numerical differential equation solver · 42 model families", fa: "حل‌کنندهٔ نمادین و عددی معادلات دیفرانسیل · ۴۲ خانوادهٔ مدل" },
-  "tabs-model": { en: "Model solver", fa: "حل‌گر مدلی" },
+  "nav-solve": { en: "Solver", fa: "حل‌کننده" },
+  "nav-examples": { en: "Examples", fa: "مثال‌ها" },
+  "nav-pricing": { en: "Token packs", fa: "پک‌های توکن" },
+  "nav-account": { en: "Account", fa: "حساب کاربری" },
+  "nav-login": { en: "Sign in", fa: "ورود" },
+  "nav-logout": { en: "Log out", fa: "خروج" },
+  "hero-tag": { en: "42 model families · exact + numerical", fa: "۴۲ خانوادهٔ مدل · حل دقیق + عددی" },
+  "hero-line1": { en: "Write the differential equation,", fa: "معادلهٔ دیفرانسیل را بنویس،" },
+  "hero-line2": { en: "get the exact answer.", fa: "جوابِ دقیق را بگیر." },
+  "hero-sub": { en: "Type it however you like — y′ = -2y, dy/dt = -2y, y″ + 2y′ + y = 0, or just the right-hand side. Every input gets an answer: closed form, unevaluated integral, implicit quadrature, Taylor series, algebraic roots, or a verified numerical curve with a residual check.", fa: "هر نمادی که راحت‌ترید بنویسید — y′ = -2y، dy/dt = -2y، y″ + 2y′ + y = 0 یا فقط سمت راست معادله. هر ورودی جواب می‌گیرد: فرم بسته، انتگرال بازمانده، فرم ضمنی، سری تیلور، ریشهٔ جبری یا منحنی عددی معتبر همراه با باقی‌مانده." },
+  "cta-start": { en: "Start solving", fa: "شروع حل" },
+  "cta-account": { en: "Create a free account", fa: "ساخت حساب رایگان" },
+  "stat-families": { en: "model families", fa: "خانوادهٔ مدل" },
+  "stat-notation": { en: "accepted notations", fa: "نمادهای قابل قبول" },
+  "stat-tokens": { en: "free tokens", fa: "توکن هدیه" },
+  "stat-keys": { en: "external keys needed", fa: "کلید بیرونی لازم" },
+  "hero-out-label": { en: "Exact solution", fa: "جواب دقیق" },
+  "hero-verified": { en: "residual: 0", fa: "باقی‌مانده: 0" },
   "tabs-free": { en: "Free equation", fa: "معادلهٔ آزاد" },
+  "tabs-model": { en: "42 model families", fa: "۴۲ خانوادهٔ مدل" },
+  "tabs-skills": { en: "Solver skills", fa: "مهارت‌های حل" },
+  "skills-title": { en: "Solver skills", fa: "مهارت‌های حل‌کننده" },
+  "skills-intro": { en: "A skill is one named capability the engine and its AI layer can call directly. The catalog below is served by the API, so it always matches the code.", fa: "هر مهارت یک توانایی مشخص است که موتور و لایهٔ هوش مصنوعی می‌توانند آن را با نام صدا بزنند. فهرست زیر از API می‌آید و همیشه با کد هم‌خوان است." },
+  "skills-ph": { en: "e.g. is this system chaotic?", fa: "مثلاً: این دستگاه آشوبی است؟" },
+  "skills-match": { en: "Suggest a skill", fa: "پیشنهاد مهارت" },
+  "skills-loading": { en: "Loading the skills catalog…", fa: "در حال بارگذاری فهرست مهارت‌ها…" },
+  "skills-download": { en: "Could not load the skills catalog.", fa: "بارگذاری فهرست مهارت‌ها ممکن نشد." },
+  "skills-none": { en: "No skill matched that request.", fa: "هیچ مهارتی با این درخواست هم‌خوان نبود." },
+  "skills-when": { en: "When to use", fa: "کجا به کار می‌آید" },
+  "skills-run": { en: "Try it", fa: "امتحان کن" },
+  "skills-running": { en: "Running…", fa: "در حال اجرا…" },
+  "skills-score": { en: "match", fa: "هم‌خوانی" },
+  "free-title": { en: "Write your equation", fa: "معادله را بنویسید" },
+  "free-hint": { en: "Any notation works: a bare right-hand side (-2*y + sin(t)), y′ = …, dy/dt = …, implicit form (y′ + 2y = 0), second order (y″ + 2y′ + y = 0), and even inline conditions (y′ = -2y, y(0) = 1).", fa: "هر شکل نوشتنی قبول است: سمت راست معادله (-2*y + sin(t))، y′ = …، dy/dt = …، فرم ضمنی (y′ + 2y = 0)، مرتبهٔ دوم (y″ + 2y′ + y = 0) و حتی شرایط اولیه داخل متن (y′ = -2y, y(0) = 1)." },
+  "free-eq-label": { en: "Equation", fa: "معادله" },
+  "free-t0": { en: "t start (t₀)", fa: "آغاز بازه (t₀)" },
+  "free-t1": { en: "t end (t₁)", fa: "پایان بازه (t₁)" },
+  t0: { en: "t start (t₀)", fa: "آغاز بازه (t₀)" },
+  t1: { en: "t end (t₁)", fa: "پایان بازه (t₁)" },
+  "free-dep-label": { en: "Dependent variable (y)", fa: "متغیر وابسته (y)" },
+  "free-ind-label": { en: "Independent variable (t)", fa: "متغیر مستقل (t)" },
+  "free-y0-label": { en: "Initial values y(t₀), y′(t₀)", fa: "شرایط اولیه y(t₀), y′(t₀)" },
+  "btn-solve-eq": { en: "⚡ Solve equation", fa: "⚡ حل معادله" },
+  "btn-classify": { en: "Classify equation", fa: "تشخیص نوع معادله" },
+  "examples-title": { en: "Try one of these", fa: "یک مثال را امتحان کنید" },
   "cat-model-title": { en: "1 · Choose a model family", fa: "۱ · خانوادهٔ مدل را انتخاب کنید" },
   "cat-param-title": { en: "2 · Configure inputs", fa: "۲ · ورودی‌ها را تنظیم کنید" },
   search: { en: "Search models…", fa: "جست‌وجوی مدل‌ها…" },
-  t0: { en: "t start (t₀)", fa: "آغاز بازه (t₀)" },
-  t1: { en: "t end (t₁)", fa: "پایان بازه (t₁)" },
   profile: { en: "Initial spatial profile", fa: "پروفایل اولیهٔ فضایی" },
   "profile-sine": { en: "sine bump", fa: "برآمدگی سینوسی" },
   "profile-gauss": { en: "gaussian bump", fa: "برآمدگی گاوسی" },
   "profile-flat": { en: "constant", fa: "ثابت" },
   amplitude: { en: "Amplitude", fa: "دامنه" },
   "profile-hint": { en: "Spatial grid values are generated from the profile.", fa: "مقادیر شبکهٔ فضایی از روی پروفایل ساخته می‌شوند." },
+  method: { en: "Method", fa: "روش" },
+  "method-auto": { en: "auto", fa: "خودکار" },
   points: { en: "Output points", fa: "تعداد نقاط خروجی" },
   "btn-solve": { en: "⚡ Solve", fa: "⚡ حل کن" },
   "btn-example": { en: "Try an example", fa: "یک مثال امتحان کن" },
-  "btn-symbolic": { en: "Solve symbolically", fa: "حل نمادین" },
-  "btn-classify": { en: "Classify (local)", fa: "تشخیص نوع (محلی)" },
   "result-title": { en: "Solution", fa: "جواب" },
   "meta-title": { en: "Solver metadata", fa: "فرادادهٔ حل‌کننده" },
-  "free-title": { en: "Solve a first-order ODE symbolically", fa: "حل نمادین معادلهٔ دیفرانسیل مرتبهٔ اول" },
-  "free-hint": { en: "Write only the right-hand side f(t, y) of y′ = f(t, y).", fa: "فقط سمت راست f(t, y) معادلهٔ y′ = f(t, y) را بنویسید." },
+  "foot-models": { en: "models", fa: "مدل" },
   "about-title": { en: "Engine", fa: "موتور" },
-  about1: { en: "SymPy for exact solutions of ODE families.", fa: "SymPy برای جواب‌های دقیق خانواده‌های ODE." },
-  about2: { en: "SciPy RK45 / BDF / Radau / LSODA for numerical systems, with automatic BDF for stiff problems.", fa: "روش‌های عددی RK45 / BDF / Radau / LSODA با انتخاب خودکار BDF برای مسائل سخت." },
+  about1: { en: "SymPy for exact solutions of differential equation families.", fa: "SymPy برای جواب‌های دقیق خانواده‌های معادلات دیفرانسیل." },
+  about7: { en: "No input dead-ends: closed form, unevaluated integral, implicit quadrature (energy integral), Taylor series, algebraic roots, or a verified numerical curve — each solve bounded in time, memory, and step count.", fa: "هیچ ورودی‌ای بی‌جواب نمی‌ماند: فرم بسته، انتگرال بازمانده، فرم ضمنی (انتگرال انرژی)، سری تیلور، ریشهٔ جبری یا منحنی عددی معتبر — و هر حل با محدودیت زمان، حافظه و تعداد گام اجرا می‌شود." },
+  about2: { en: "SciPy RK45 / BDF / Radau / LSODA for numerical systems, with automatic method selection for stiff problems.", fa: "SciPy با روش‌های RK45 / BDF / Radau / LSODA برای سیستم‌های عددی، با انتخاب خودکار روش برای مسائل سخت." },
   about3: { en: "Finite-difference solvers for heat, wave, advection, Laplace and Poisson PDEs.", fa: "حل‌کننده‌های تفاضل محدود برای معادلات حرارت، موج، جابه‌جایی، لاپلاس و پواسون." },
   about4: { en: "Boundary value problems, Sturm–Liouville eigenvalues, delay equations, and inverse (curve-fit) problems.", fa: "مسائل مقدار مرزی، مقدارهای ویژهٔ استورم–لیوویل، معادلات تأخیری و مسائل معکوس." },
   about5: { en: "Every result carries a residual check and verification metadata. No user input is ever executed as code.", fa: "هر نتیجه با بررسی باقی‌مانده و فرادادهٔ اعتبارسنجی همراه است. هیچ ورودی کاربری هرگز به‌صورت کد اجرا نمی‌شود." },
   about6: { en: "Token packs never expire: each tool and model costs tokens by difficulty, and your balance is shown in the header.", fa: "پک‌های توکن منقضی نمی‌شوند: هزینهٔ هر ابزار و مدل بر اساس سختی از توکن‌های شما کم می‌شود و موجودی در سربرگ نمایش داده می‌شود." },
-  "connecting": { en: "Connecting to the solver API…", fa: "در حال اتصال به API حل‌کننده…" },
+  connecting: { en: "Connecting to the solver API…", fa: "در حال اتصال به API حل‌کننده…" },
   "cost-hint": { en: "Cost", fa: "هزینه" },
-  "tokens": { en: "tokens", fa: "توکن" },
+  tokens: { en: "tokens", fa: "توکن" },
   "tokens-left": { en: "balance", fa: "موجودی" },
   "upgrade-tokens": { en: "Not enough tokens — top up to continue.", fa: "توکن کافی نیست — برای ادامه حساب خود را شارژ کنید." },
+  "trial-over": { en: "Your free trial tokens are used up. Create an account and get 50 more.", fa: "توکن‌های آزمایشی شما تمام شد. یک حساب بسازید و ۵۰ توکن هدیه بگیرید." },
+  "signup-cta": { en: "Sign up free →", fa: "ثبت‌نام رایگان ←" },
   "view-plans": { en: "View packs →", fa: "مشاهدهٔ پک‌ها ←" },
   "api-down": { en: "Solver API unreachable. Start it with: npm run api (port 8000).", fa: "API حل‌کننده در دسترس نیست. با دستور npm run api آن را اجرا کنید." },
-  "free-sym-empty": { en: "Enter an equation first.", fa: "ابتدا یک معادله وارد کنید." },
-  "free-class-title": { en: "Local classification", fa: "تشخیص محلی" },
-  "stats-end": { en: "State at final step", fa: "مقدار متغیرها در پایان" },
-  "stats-min": { en: "min", fa: "کمینه" },
-  "stats-max": { en: "max", fa: "بیشینه" },
-  "stats-final": { en: "final", fa: "پایانی" },
-  "sol-symbolic": { en: "Exact (symbolic) solution", fa: "جواب دقیق (نمادین)" },
+  "eq-empty": { en: "Enter an equation first.", fa: "ابتدا یک معادله وارد کنید." },
+  "class-title": { en: "Local classification", fa: "تشخیص محلی" },
+  "sol-exact": { en: "Exact (symbolic) solution", fa: "جواب دقیق (نمادین)" },
+  "sol-numeric": { en: "Numerical solution", fa: "جواب عددی" },
+  "sol-integral": { en: "Exact solution — the integral is left unevaluated", fa: "جواب دقیق — انتگرال به‌صورت باز مانده است" },
+  "sol-implicit": { en: "Implicit solution (integrated in quadrature)", fa: "جواب ضمنی (به‌صورت انتگرال‌گیری‌شده)" },
+  "sol-series": { en: "Taylor series of the solution", fa: "سری تیلور جواب" },
+  "sol-algebraic": { en: "Algebraic answer — this is not a differential equation", fa: "جواب جبری — این معادلهٔ دیفرانسیل نیست" },
+  "kind-symbolic": { en: "closed form", fa: "فرم بسته" },
+  "kind-integral": { en: "integral form", fa: "فرم انتگرالی" },
+  "kind-implicit": { en: "implicit", fa: "ضمنی" },
+  "kind-series": { en: "series", fa: "سری" },
+  "kind-algebraic": { en: "algebraic", fa: "جبری" },
+  "kind-numeric": { en: "numerical", fa: "عددی" },
+  "series-note": { en: "No closed form was available, so the answer is the Taylor expansion of the solution at the start of the interval.", fa: "فرم بسته‌ای در کتابخانهٔ حل‌کننده پیدا نشد؛ پس جواب، بسط تیلور جواب در ابتدای بازه است." },
+  "implicit-note": { en: "The equation is integrated once; the answer relates y and the integral rather than isolating y.", fa: "معادله یک بار انتگرال‌گیری شده است؛ جواب رابطهٔ میان y و انتگرال را می‌دهد و y را جدا نمی‌کند." },
   "sol-eigen": { en: "Computed eigenvalues", fa: "مقدارهای ویژهٔ محاسبه‌شده" },
-  "dim-msg": { en: "result", fa: "نتیجه" },
-  "residual": { en: "residual", fa: "باقی‌مانده" },
-  "method": { en: "method", fa: "روش" },
-  "status": { en: "status", fa: "وضعیت" },
-  "msg": { en: "message", fa: "پیام" },
+  "sol-kind": { en: "kind", fa: "نوع" },
+  "sol-order": { en: "order", fa: "مرتبه" },
+  "sol-copy": { en: "Copy", fa: "کپی" },
+  "sol-copied": { en: "Copied", fa: "کپی شد" },
+  "sol-chart": { en: "y(t) over the interval", fa: "y(t) در بازه" },
+  residual: { en: "residual", fa: "باقی‌مانده" },
+  status: { en: "status", fa: "وضعیت" },
+  msg: { en: "message", fa: "پیام" },
   "eigen-val": { en: "λ", fa: "λ" },
   "plot-x": { en: "t", fa: "t" },
+  "stats-end": { en: "State at final step", fa: "مقدار متغیرها در پایان" },
+  "stats-final": { en: "final", fa: "پایانی" },
+  "stat-samples": { en: "samples", fa: "نمونه" },
+  "try-one": { en: "Loaded an example — press Solve.", fa: "یک مثال بارگذاری شد — دکمهٔ حل را بزنید." },
+  "run-example": { en: "Running the example…", fa: "در حال اجرای مثال…" },
 };
 
+let LANG = "fa";
+
 function tr(key) {
-  const entry = I18N[key] || { en: key, fa: key };
+  const entry = I18N[key];
+  if (!entry) return key;
   return entry[LANG] || entry.en;
 }
 
-let LANG = "en";
+/* ============================= Equation examples ============================= */
+const EQ_EXAMPLES = [
+  { eq: "y' + 2*y = 0", y0: "1", t0: "0", t1: "5" },
+  { eq: "-2*y + sin(t)", y0: "0", t0: "0", t1: "6" },
+  { eq: "y'' + 2*y' + y = 0", y0: "1, 0", t0: "0", t1: "6" },
+  { eq: "dy/dt = -2*y", y0: "1", t0: "0", t1: "3" },
+  { eq: "y' = y*(1 - y/10)", y0: "1", t0: "0", t1: "6" },
+  { eq: "y' = y^2 - t", y0: "0.5", t0: "0", t1: "2" },
+  { eq: "y' = sin(t)*y + t", y0: "1", t0: "0", t1: "3" },
+  { eq: "y'' + sin(y) = 0", y0: "1, 0", t0: "0", t1: "6.3" },
+  { eq: "y'' + y^3 = 0", y0: "1, 0", t0: "0", t1: "6.3" },
+  { eq: "x^2 - 5*x + 6 = 0", y0: "", t0: "0", t1: "1" },
+  { eq: "y' = -100*y", y0: "1", t0: "0", t1: "1" },
+  { eq: "y\" = -y, y(0) = 0, y'(0) = 1", y0: "", t0: "0", t1: "6.3" },
+  { eq: "x*y' = y", y0: "1", t0: "1", t1: "3" },
+  { eq: "y' = x^2", y0: "", t0: "0", t1: "3" },
+];
 
 /* ============================= Model presets ============================= */
 /* group keys: sym = symbolic ODE · num = numerical system · stiff · series · special · pde · grid-ode · bvp · eigen · delay · inverse */
@@ -149,6 +228,7 @@ let currentModel = "logistic";
 let modelNames = Object.keys(MODEL_DEFS);
 let TOKEN_COSTS = {};
 let MY_ENTITLEMENT = null;
+let MY_USER = null;
 let exampleIdx = 0;
 const EXAMPLE_CYCLE = ["logistic", "van_der_pol", "lorenz", "pendulum", "heat_equation", "eigenvalue", "boundary_value", "inverse_problem"];
 
@@ -167,15 +247,26 @@ function fmt(x, digits = 5) {
 }
 
 function readNum(input, fallback) {
+  if (!input) return fallback;
   const v = parseFloat(input.value);
   return isFinite(v) ? v : fallback;
+}
+
+function toast(message) {
+  const box = $("toast");
+  if (!box) return;
+  box.textContent = message;
+  box.classList.remove("hidden");
+  window.clearTimeout(toast._timer);
+  toast._timer = window.setTimeout(() => box.classList.add("hidden"), 2200);
 }
 
 /* ============================= Catalog / config UI ============================= */
 function buildModelOptions() {
   const sel = $("model-select");
+  if (!sel) return;
   sel.innerHTML = "";
-  const q = $("model-search").value.trim().toLowerCase();
+  const q = ($("model-search").value || "").trim().toLowerCase();
   for (const [gid, gname] of GROUP_ORDER) {
     const names = modelNames.filter((n) => MODEL_DEFS[n].g === gid);
     if (!names.length) continue;
@@ -253,7 +344,8 @@ function buildConfigUI() {
   /* span / method / points */
   $("p-t0").value = String(def.t0 ?? 0);
   $("p-t1").value = String(def.t1 ?? 1);
-  $("p-points").value = String(def.pts || 200);
+  const pts = $("p-points-catalog");
+  if (pts) pts.value = String(def.pts || 200);
   $("p-rtol").value = "1e-7";
   $("p-method").value = "auto";
 
@@ -277,7 +369,8 @@ function buildConfigUI() {
 function describeModel(def) {
   const box = $("model-desc");
   box.innerHTML = "";
-  const kindText = GROUP_ORDER.find(([g]) => g === def.g)[1][LANG];
+  const group = GROUP_ORDER.find(([g]) => g === def.g);
+  const kindText = group ? group[1][LANG] : "";
   const b = el("span");
   b.textContent = `« ${LANG === "fa" ? def.fa : def.en} » · ${kindText} · `;
   box.appendChild(b);
@@ -292,21 +385,24 @@ function describeModel(def) {
   }
 }
 
+function catalogPoints() {
+  return Math.min(2000, Math.max(2, Math.round(readNum($("p-points-catalog"), 200))));
+}
+
 function currentCost() {
   const base = TOKEN_COSTS[currentModel] || 2;
-  const points = Math.min(2000, Math.max(2, Math.round(readNum($("p-points"), 200))));
-  return base + Math.max(0, Math.floor((points - 500) / 1000));
+  return base + Math.max(0, Math.floor((catalogPoints() - 500) / 1000));
 }
 
 function updateCostHint() {
-  const box = $("cost-hint");
-  if (!box) return;
+  const boxes = [$("cost-hint"), $("cost-hint-catalog")].filter(Boolean);
+  if (!boxes.length) return;
   let text = `${tr("cost-hint")}: ${currentCost()} ${tr("tokens")}`;
   if (MY_ENTITLEMENT) {
     const balance = MY_ENTITLEMENT.unlimited ? null : MY_ENTITLEMENT.tokens;
     text += ` · ${tr("tokens-left")}: ${balance === null ? "∞" : fmtInt(balance)}`;
   }
-  box.textContent = text;
+  boxes.forEach((b) => { b.textContent = text; });
 }
 
 function selectModel(name) {
@@ -346,7 +442,7 @@ function readConfig() {
     method: $("p-method").value === "auto" ? "RK45" : $("p-method").value,
     rtol: readNum($("p-rtol"), 1e-7),
     atol: 1e-9,
-    points: Math.min(2000, Math.max(2, Math.round(readNum($("p-points"), 200)))),
+    points: catalogPoints(),
   };
 }
 
@@ -396,111 +492,25 @@ async function api(path, body) {
 
 function setBanner(kind, msg) {
   const b = $("banner-" + kind);
+  if (!b) return;
   b.textContent = msg || "";
   b.classList.toggle("hidden", !msg);
 }
 
-/* ============================= Result rendering ============================= */
-function showResults(data, def) {
-  const card = $("results");
-  card.classList.remove("hidden");
-  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-
-  const chips = $("res-chips");
-  chips.innerHTML = "";
-  const addChip = (cls, key) => chips.appendChild(el("span", "chip " + cls, key));
-  addChip(data.status === "success" ? "ok" : "err", tr("status") + ": " + data.status);
-  addChip("info", tr("method") + ": " + data.method);
-
-  /* symbolic */
-  const sym = $("res-symbolic");
-  sym.classList.toggle("hidden", !data.symbolic_solution);
-  if (data.symbolic_solution) {
-    sym.textContent = tr("sol-symbolic") + ":  " + data.symbolic_solution;
-  }
-
-  /* eigenvalues */
-  const eig = $("res-eigen");
-  eig.classList.toggle("hidden", !(data.eigenvalues && data.eigenvalues.length));
-  if (data.eigenvalues && data.eigenvalues.length) {
-    eig.innerHTML = "";
-    const h = el("div", "hint");
-    h.textContent = tr("sol-eigen") + " (Sturm–Liouville):";
-    eig.appendChild(h);
-    const ul = el("ul");
-    data.eigenvalues.slice(0, 12).forEach((v) => {
-      const li = el("li");
-      li.textContent = `${tr("eigen-val")}₁… = `;
-      li.textContent = `λ = ${fmt(v)}`;
-      ul.appendChild(li);
-    });
-    eig.appendChild(ul);
-  }
-
-  /* chart */
-  const plotWrap = $("plot-wrap");
-  const t = data.t || [];
-  const y = data.y || [];
-  const hasShape = Array.isArray(t) && Array.isArray(y) && y.length > 1 && y[0] && t.length >= 2;
-  plotWrap.classList.toggle("hidden", !hasShape);
-  if (hasShape) drawPlot(t, y, def, data);
-
-  /* summary stats */
-  const grid = $("res-grid");
-  grid.innerHTML = "";
-  const addStat = (k, v, small) => {
-    const s = el("div", "stat");
-    s.appendChild(el("div", "k", k));
-    s.appendChild(el("div", "v" + (small ? " small" : ""), v));
-    grid.appendChild(s);
-  };
-  addStat(tr("residual"), fmt(data.residual_max), true);
-  addStat(tr("msg"), String(data.message || ""), true);
-  if (hasShape && y[0].length === 1) {
-    addStat(tr("stats-final"), fmt(y[y.length - 1][0]));
-  } else if (hasShape && y[0].length <= 12) {
-    const names = (def.vars && def.vars.length === y[0].length) ? def.vars : y[0].map((_, i) => `y${i}`);
-    const last = y[y.length - 1];
-    names.forEach((n, i) => {
-      addStat(n + "  " + tr("stats-final"), fmt(last[i]), true);
-    });
-  }
-
-  /* metadata */
-  const meta = $("res-meta");
-  const metaObj = {};
-  if (data.metadata) metaObj.metadata = data.metadata;
-  metaObj.samples = hasShape ? `${t.length} × ${y[0].length}` : "n/a";
-  if (data.eigenvalues) metaObj.eigenvalue_count = data.eigenvalues.length;
-  meta.textContent = JSON.stringify(metaObj, null, 2);
-}
-
-function downsample(arr, max) {
-  if (arr.length <= max) return arr;
-  const step = arr.length / max;
-  const out = [];
-  for (let i = 0; i < max; i++) out.push(arr[Math.min(arr.length - 1, Math.round(i * step))]);
-  return out;
-}
-
-function drawPlot(tRaw, yRaw, def, data) {
-  const canvas = $("plot");
+/* ============================= Charts ============================= */
+function drawChart(canvas, legEl, tRaw, yRaw, def, options) {
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
+  const opts = options || {};
   ctx.clearRect(0, 0, W, H);
 
   const rows = yRaw.length;
   const cols = yRaw[0].length;
-  const gridPde = cols > 8 || (def.g === "pde") || (def.g === "gridnum") || (def.g === "eigen");
+  const gridView = opts.mode === "grid";
 
-  let xs, series;
-  let legend = [];
-  const tMin = Math.min(...tRaw.map(Number));
-  const tMax = Math.max(...tRaw.map(Number));
-
-  const gridView = gridPde;
+  let xs, series, legend;
   if (gridView) {
-    /* rows are curves over the column index (PDE snapshots / eigenfunctions / grid systems) */
+    /* rows are curves over the column index (PDE snapshots / eigenfunctions) */
     const N = Math.min(8, rows);
     const idxs = [];
     for (let i = 0; i < N; i++) idxs.push(Math.round(i * (rows - 1) / Math.max(N - 1, 1)));
@@ -575,7 +585,6 @@ function drawPlot(tRaw, yRaw, def, data) {
   });
 
   /* legend */
-  const legEl = $("plot-legend");
   legEl.innerHTML = "";
   legend.slice(0, 8).forEach((name, si) => {
     const span = el("span");
@@ -586,76 +595,284 @@ function drawPlot(tRaw, yRaw, def, data) {
     legEl.appendChild(span);
   });
   const ax = el("span");
-  ax.textContent = `x-axis: ${def.g === "pde" || def.g === "gridnum" || def.g === "eigen" ? "grid index" : tr("plot-x")}`;
+  ax.textContent = `x-axis: ${gridView ? "grid index" : tr("plot-x")}`;
   legEl.appendChild(ax);
 }
 
+/* ============================= Model solver ============================= */
+function showModelResults(data, def) {
+  const card = $("results");
+  card.classList.remove("hidden");
+  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  const chips = $("res-chips");
+  chips.innerHTML = "";
+  const addChip = (cls, key) => chips.appendChild(el("span", "chip " + cls, key));
+  addChip(data.status === "success" ? "ok" : "err", tr("status") + ": " + data.status);
+  addChip("info", tr("method") + ": " + data.method);
+
+  const sym = $("res-symbolic");
+  sym.classList.toggle("hidden", !data.symbolic_solution);
+  if (data.symbolic_solution) {
+    sym.textContent = tr("sol-exact") + ":  " + data.symbolic_solution;
+  }
+
+  const eig = $("res-eigen");
+  eig.classList.toggle("hidden", !(data.eigenvalues && data.eigenvalues.length));
+  if (data.eigenvalues && data.eigenvalues.length) {
+    eig.innerHTML = "";
+    const h = el("div", "hint");
+    h.textContent = tr("sol-eigen") + " (Sturm–Liouville):";
+    eig.appendChild(h);
+    const ul = el("ul");
+    data.eigenvalues.slice(0, 12).forEach((v) => {
+      const li = el("li");
+      li.textContent = `λ = ${fmt(v)}`;
+      ul.appendChild(li);
+    });
+    eig.appendChild(ul);
+  }
+
+  const plotWrap = $("plot-wrap");
+  const t = data.t || [];
+  const y = data.y || [];
+  const hasShape = Array.isArray(t) && Array.isArray(y) && y.length > 1 && y[0] && t.length >= 2;
+  plotWrap.classList.toggle("hidden", !hasShape);
+  if (hasShape) drawChart($("plot"), $("plot-legend"), t, y, def, { mode: "time" });
+
+  const grid = $("res-grid");
+  grid.innerHTML = "";
+  const addStat = (k, v, small) => {
+    const s = el("div", "stat");
+    s.appendChild(el("div", "k", k));
+    s.appendChild(el("div", "v" + (small ? " small" : ""), v));
+    grid.appendChild(s);
+  };
+  addStat(tr("residual"), fmt(data.residual_max), true);
+  addStat(tr("msg"), String(data.message || ""), true);
+  if (hasShape && y[0].length === 1) {
+    addStat(tr("stats-final"), fmt(y[y.length - 1][0]));
+  } else if (hasShape && y[0].length <= 12) {
+    const names = (def.vars && def.vars.length === y[0].length) ? def.vars : y[0].map((_, i) => `y${i}`);
+    const last = y[y.length - 1];
+    names.forEach((n, i) => {
+      addStat(n + "  " + tr("stats-final"), fmt(last[i]), true);
+    });
+  }
+
+  const meta = $("res-meta");
+  const metaObj = {};
+  if (data.metadata) metaObj.metadata = data.metadata;
+  metaObj.samples = hasShape ? `${t.length} × ${y[0].length}` : "n/a";
+  if (data.eigenvalues) metaObj.eigenvalue_count = data.eigenvalues.length;
+  meta.textContent = JSON.stringify(metaObj, null, 2);
+}
+
 /* ============================= Free-form equation ============================= */
-function classifyFree(text) {
-  return api("/analyze", { text, language: LANG });
+function readEquationConfig() {
+  const icText = ($("free-y0").value || "").trim();
+  const initial = icText
+    ? icText.split(/[,\s]+/).filter((s) => s !== "").map((s) => parseFloat(s)).filter((v) => isFinite(v))
+    : [];
+  return {
+    equation: ($("free-eq").value || "").trim(),
+    variable: ($("free-dep").value || "y").trim() || "y",
+    independent: ($("free-ind").value || "t").trim() || "t",
+    t_span: [readNum($("eq-t0"), 0), readNum($("eq-t1"), 5)],
+    initial_values: initial,
+    points: Math.min(2000, Math.max(2, Math.round(readNum($("eq-points"), 200)))),
+  };
 }
 
-async function symbolicFree(equation, variable, independent) {
-  return api("/solve/symbolic", { equation, variable, independent });
-}
+/* Every answer kind the solver can return, with the heading it deserves. */
+const KIND_LABEL = {
+  symbolic: "kind-symbolic",
+  integral: "kind-integral",
+  implicit: "kind-implicit",
+  series: "kind-series",
+  algebraic: "kind-algebraic",
+  numeric: "kind-numeric",
+};
+const KIND_HEADING = {
+  integral: "sol-integral",
+  implicit: "sol-implicit",
+  series: "sol-series",
+  algebraic: "sol-algebraic",
+  numeric: "sol-numeric",
+};
+const KIND_NOTE = { series: "series-note", implicit: "implicit-note" };
 
-function renderFreeResult(items) {
-  const pane = $("free-res");
+function renderEquationResult(data, target) {
+  const pane = target || $("free-res");
   pane.classList.remove("hidden");
   pane.innerHTML = "";
-  const wrap = el("div", "result-pane-inner");
-  for (const [label, val, mono] of items) {
+
+  const head = el("div", "result-head");
+  head.appendChild(el("h2", "", tr("result-title")));
+  const chips = el("span", "chips");
+  const success = data.status === "success";
+  chips.appendChild(el("span", "chip " + (success ? "ok" : "err"), tr("status") + ": " + data.status));
+  if (data.kind) {
+    const label = tr(KIND_LABEL[data.kind] || data.kind);
+    chips.appendChild(el("span", "chip info", tr("sol-kind") + ": " + label));
+  }
+  if (data.method) chips.appendChild(el("span", "chip info", tr("method") + ": " + data.method));
+  if (data.order) chips.appendChild(el("span", "chip", tr("sol-order") + ": " + data.order));
+  head.appendChild(chips);
+  pane.appendChild(head);
+
+  if (data.solution) {
+    const block = el("div", "sol-block");
+    block.appendChild(el("div", "sol-label", tr(KIND_HEADING[data.kind] || "sol-exact")));
+    block.appendChild(el("div", "sol-value", data.solution));
+    const actions = el("div", "sol-actions");
+    const copy = el("button", "btn btn-small", tr("sol-copy"));
+    copy.onclick = () => {
+      if (navigator.clipboard) navigator.clipboard.writeText(data.solution);
+      toast(tr("sol-copied"));
+    };
+    actions.appendChild(copy);
+    block.appendChild(actions);
+    pane.appendChild(block);
+  }
+
+  if (data.message) {
+    const note = el("div", "sol-note" + (success ? " ok" : ""), (success ? "✓ " : "✗ ") + data.message);
+    pane.appendChild(note);
+  }
+  const kindNote = KIND_NOTE[data.kind];
+  if (kindNote && success) {
+    pane.appendChild(el("div", "sol-note", "ℹ " + tr(kindNote)));
+  }
+  if (data.hint) {
+    const hint = el("div", "sol-note", "ℹ " + data.hint);
+    pane.appendChild(hint);
+  }
+
+  const t = data.t || [];
+  const y = data.y || [];
+  const hasShape = Array.isArray(t) && Array.isArray(y) && y.length > 1 && y[0] && t.length >= 2;
+  if (hasShape) {
+    const wrap = el("div", "plot-wrap");
+    const canvas = el("canvas");
+    canvas.width = 900;
+    canvas.height = 380;
+    const legend = el("div", "legend");
+    wrap.append(canvas, legend);
+    pane.appendChild(wrap);
+    drawChart(canvas, legend, t, y, { g: "num", vars: [data.variable || "y"] }, { mode: "time" });
+  } else if (success && !data.solution) {
+    pane.appendChild(el("div", "sol-note", "ℹ " + tr("stats-end")));
+  }
+
+  const grid = el("div", "res-grid");
+  const addStat = (k, v, small) => {
     const s = el("div", "stat");
-    s.appendChild(el("div", "k", label));
-    const v = el("div", "v" + (mono ? " small mono" : ""));
-    v.textContent = val;
-    s.appendChild(v);
-    wrap.appendChild(s);
+    s.appendChild(el("div", "k", k));
+    s.appendChild(el("div", "v" + (small ? " small" : ""), v));
+    grid.appendChild(s);
+  };
+  addStat(tr("residual"), fmt(data.residual_max), true);
+  if (hasShape) {
+    addStat(tr("stat-samples"), String(t.length), true);
+    addStat(tr("stats-final"), fmt(y[y.length - 1] && y[y.length - 1][0]));
   }
-  pane.appendChild(wrap);
+  if (data.normalized) addStat("parse", data.normalized, true);
+  pane.appendChild(grid);
 }
 
-/* ============================= Wiring ============================= */
-function applyLang() {
-  const isFa = LANG === "fa";
-  document.documentElement.lang = LANG;
-  document.documentElement.dir = isFa ? "rtl" : "ltr";
-  document.querySelectorAll("[data-i18n]").forEach((n) => {
-    n.textContent = tr(n.dataset.i18n);
-  });
-  $("lang-en").classList.toggle("active", !isFa);
-  $("lang-fa").classList.toggle("active", isFa);
-  const tabs = document.querySelectorAll(".tab");
-  tabs[0].textContent = tr("tabs-model");
-  tabs[1].textContent = tr("tabs-free");
-  const mSel = $("model-select");
-  const keep = mSel.value || currentModel;
-  buildModelOptions();
-  selectModel(keep || currentModel);
-}
-
-async function healthCheck() {
+async function runEquationSolve(showErrors = true) {
+  setBanner("error", "");
+  const body = readEquationConfig();
+  if (!body.equation) {
+    if (showErrors) setBanner("error", tr("eq-empty"));
+    return;
+  }
+  const btn = $("btn-free-solve");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = LANG === "fa" ? "در حال حل…" : "Solving…";
   try {
-    const h = await api("/health");
-    $("health-state").textContent = h.status || "ok";
-    $("health-state").style.color = "var(--ok)";
-    $("health-models").textContent = String(h.models);
-  } catch (e) {
-    $("health-state").textContent = "offline";
-    $("health-state").style.color = "var(--err)";
-    setBanner("warn", tr("api-down"));
+    const data = await api("/solve/equation", body);
+    renderEquationResult(data);
+    initAuthArea();
+  } catch (err) {
+    if (err.status === 402) showUpgrade(err.detail || err.message);
+    else if (showErrors) setBanner("error", `✗ ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 }
 
+async function classifyEquation() {
+  setBanner("error", "");
+  const text = ($("free-eq").value || "").trim();
+  if (!text) { setBanner("error", tr("eq-empty")); return; }
+  const btn = $("btn-free-classify");
+  btn.disabled = true;
+  try {
+    const data = await api("/analyze", { text, language: LANG });
+    const d = data.data || {};
+    const grid = el("div", "res-grid");
+    const entry = (k, v) => {
+      const s = el("div", "stat");
+      s.appendChild(el("div", "k", k));
+      s.appendChild(el("div", "v small", String(v)));
+      grid.appendChild(s);
+    };
+    entry(tr("class-title") + " — model", d.model || "?");
+    entry("variables", (d.variables || []).join(", "));
+    entry("source", d.source || "local");
+    entry("requires_external_api", String(d.requires_external_api));
+    const pane = $("free-res");
+    pane.classList.remove("hidden");
+    pane.innerHTML = "";
+    const head = el("div", "result-head");
+    head.appendChild(el("h2", "", tr("class-title")));
+    const chips = el("span", "chips");
+    chips.appendChild(el("span", "chip info", String(d.model || "?")));
+    head.appendChild(chips);
+    pane.append(head, grid);
+    initAuthArea();
+  } catch (err) {
+    if (err.status === 402) showUpgrade(err.detail || err.message);
+    else setBanner("error", `✗ ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function buildExampleChips() {
+  const box = $("example-chips");
+  if (!box) return;
+  box.innerHTML = "";
+  EQ_EXAMPLES.forEach((item) => {
+    const chip = el("button", "example-chip", item.eq);
+    chip.type = "button";
+    chip.onclick = () => {
+      $("free-eq").value = item.eq;
+      $("free-y0").value = item.y0;
+      $("eq-t0").value = item.t0;
+      $("eq-t1").value = item.t1;
+      $("free-res").classList.add("hidden");
+      runEquationSolve(false).then(() => toast(tr("try-one")));
+    };
+    box.appendChild(chip);
+  });
+}
+
+/* ============================= Model solve action ============================= */
 async function runSolve() {
   const btn = $("btn-solve");
+  const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = LANG === "fa" ? "در حال حل…" : "Solving…";
   setBanner("error", "");
   try {
     const body = readConfig();
     const data = await api("/solve", body);
-    showResults(data, MODEL_DEFS[currentModel]);
+    showModelResults(data, MODEL_DEFS[currentModel]);
     initAuthArea();
   } catch (err) {
     if (err.status === 402) {
@@ -665,27 +882,29 @@ async function runSolve() {
     }
   } finally {
     btn.disabled = false;
-    btn.textContent = tr("btn-solve");
+    btn.textContent = label;
   }
 }
 
 function showUpgrade(detail) {
   const d = detail && typeof detail === "object" ? detail : null;
   const code = d && d.code;
+  const anon = !MY_USER;
   const msg = code === "insufficient_tokens"
-    ? tr("upgrade-tokens")
+    ? (anon ? tr("trial-over") : tr("upgrade-tokens"))
     : ((d && d.message) || String(detail || ""));
   const b = $("banner-error");
   b.innerHTML = "";
   b.appendChild(document.createTextNode("✗ " + msg + "  "));
   const link = document.createElement("a");
-  link.href = "/pricing";
+  link.href = anon ? "/auth?returnTo=/#workspace" : "/pricing";
   link.className = "upgrade-link";
-  link.textContent = tr("view-plans");
+  link.textContent = anon ? tr("signup-cta") : tr("view-plans");
   b.appendChild(link);
   b.classList.remove("hidden");
 }
 
+/* ============================= Auth area / language ============================= */
 async function loadCosts() {
   try {
     const data = await api("/models");
@@ -703,6 +922,7 @@ async function initAuthArea() {
   let me = null;
   try { me = await api("/api/me"); } catch (_) { /* offline */ }
   MY_ENTITLEMENT = me && me.entitlement ? me.entitlement : null;
+  MY_USER = me && me.user ? me.user : null;
   slot.innerHTML = "";
   if (me && me.user) {
     const chip = document.createElement("span");
@@ -726,12 +946,12 @@ async function initAuthArea() {
       const adminLink = document.createElement("a");
       adminLink.href = "/admin";
       adminLink.className = "btn btn-small btn-primary";
-      adminLink.textContent = "Admin";
+      adminLink.textContent = LANG === "fa" ? "پنل مدیریت" : "Admin";
       slot.appendChild(adminLink);
     }
     const logout = document.createElement("button");
     logout.className = "btn btn-small";
-    logout.textContent = LANG === "fa" ? "خروج" : "Log out";
+    logout.textContent = tr("nav-logout");
     logout.onclick = async () => {
       await api("/api/auth/logout", {});
       location.reload();
@@ -741,9 +961,9 @@ async function initAuthArea() {
     const pricing = document.createElement("a");
     pricing.href = "/pricing";
     pricing.className = "btn btn-small";
-    pricing.textContent = LANG === "fa" ? "تعرفه‌ها" : "Pricing";
+    pricing.textContent = tr("nav-pricing");
     const login = document.createElement("a");
-    login.href = "/auth";
+    login.href = "/auth?returnTo=/account";
     login.className = "btn btn-small btn-primary";
     login.textContent = LANG === "fa" ? "ورود / ثبت‌نام" : "Sign in";
     slot.append(pricing, login);
@@ -751,7 +971,157 @@ async function initAuthArea() {
   }
 }
 
+function applyLang() {
+  const isFa = LANG === "fa";
+  document.documentElement.lang = LANG;
+  document.documentElement.dir = isFa ? "rtl" : "ltr";
+  document.querySelectorAll("[data-i18n]").forEach((n) => {
+    n.textContent = tr(n.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach((n) => {
+    n.placeholder = tr(n.dataset.i18nPh);
+  });
+  const bt = $("brand-title");
+  if (bt) bt.textContent = tr("brand-title");
+  const bs = $("brand-sub");
+  if (bs) bs.textContent = tr("brand-sub");
+  $("lang-en").classList.toggle("active", !isFa);
+  $("lang-fa").classList.toggle("active", isFa);
+  document.querySelectorAll(".tab").forEach((t) => {
+    if (t.dataset.tab === "freeform") t.textContent = tr("tabs-free");
+    if (t.dataset.tab === "catalog") t.textContent = tr("tabs-model");
+    if (t.dataset.tab === "skills") t.textContent = tr("tabs-skills");
+  });
+  const mSel = $("model-select");
+  const keep = mSel.value || currentModel;
+  buildModelOptions();
+  selectModel(keep || currentModel);
+  try { localStorage.setItem("de_lang", LANG); } catch (_) { /* ignore */ }
+  renderSkillsPanel();
+}
+
+/* ============================= Skills ============================= */
+/* Default inputs so every skill can be tried in one click. */
+const SKILL_TRIALS = {
+  riccati_reduction: { equation: "y' = y^2 - t" },
+  power_series: { equation: "y'' + t*y' + t^2*y = 0" },
+  frobenius: { equation: "t^2*y'' + t*y' + (t^2 - 1/4)*y = 0" },
+  equilibria_stability: { system: ["y' = y*(1 - z)", "z' = -z + y"] },
+  lyapunov_spectrum: {
+    system: ["x' = 10*(y - x)", "y' = x*(28 - z) - y", "z' = x*y - 8*z/3"],
+    initial_values: [1, 1, 1], t_span: [0, 60],
+  },
+  bifurcation_sweep: {
+    system: ["y' = a*y - y^3"], parameter: "a", parameter_range: [-1, 2], steps: 40,
+  },
+  sensitivity_analysis: { system: ["y' = -2*y"], initial_values: [1], t_span: [0, 3] },
+  stiffness_scan: {
+    system: ["y' = -1000*y + z", "z' = -y"], initial_values: [1, 0], t_span: [0, 0.5],
+  },
+};
+
+let SKILLS_CACHE = null;
+
+async function loadSkills() {
+  if (SKILLS_CACHE) return SKILLS_CACHE;
+  SKILLS_CACHE = await api("/skills");
+  return SKILLS_CACHE;
+}
+
+function renderSkillsPanel() {
+  const grid = $("skill-grid");
+  if (!grid || !SKILLS_CACHE) return;
+  grid.innerHTML = "";
+  SKILLS_CACHE.skills.forEach((skill) => {
+    const card = el("div", "skill-card");
+    const head = el("div", "skill-head");
+    head.appendChild(el("span", "skill-name", skill.name[LANG] || skill.name.en));
+    head.appendChild(el("span", "chip info", skill.category));
+    head.appendChild(el("span", "chip", skill.cost + " ★"));
+    card.appendChild(head);
+    card.appendChild(el("div", "skill-summary", skill.summary[LANG] || skill.summary.en));
+    const when = el("div", "skill-when");
+    when.appendChild(el("span", "skill-when-label", tr("skills-when")));
+    when.appendChild(el("span", "", skill.when_to_use[LANG] || skill.when_to_use.en));
+    card.appendChild(when);
+    if (SKILL_TRIALS[skill.id]) {
+      const run = el("button", "btn btn-small", tr("skills-run"));
+      run.onclick = () => runSkillTrial(skill.id, run);
+      card.appendChild(run);
+    }
+    grid.appendChild(card);
+  });
+}
+
+async function runSkillTrial(skillId, button) {
+  const pane = $("skill-res");
+  pane.classList.remove("hidden");
+  pane.innerHTML = "";
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = tr("skills-running");
+  try {
+    const data = await api("/skills/" + skillId, SKILL_TRIALS[skillId]);
+    renderEquationResult(data, pane);
+    initAuthArea();
+  } catch (err) {
+    if (err.status === 402) showUpgrade(err.detail || err.message);
+    else pane.appendChild(el("div", "sol-note", "✗ " + err.message));
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
+}
+
+async function matchSkillRequest() {
+  const box = $("skill-matches");
+  const query = ($("skill-query").value || "").trim();
+  if (!query) return;
+  const button = $("btn-skill-match");
+  const label = button.textContent;
+  button.disabled = true;
+  box.innerHTML = "";
+  try {
+    const data = await api("/skills/match", { text: query, limit: 3 });
+    box.innerHTML = "";
+    if (!data.matches.length) {
+      box.appendChild(el("div", "sol-note", "ℹ " + tr("skills-none")));
+      return;
+    }
+    data.matches.forEach((match) => {
+      const row = el("div", "skill-match-row");
+      row.appendChild(el("span", "skill-name", match.name[LANG] || match.name.en));
+      row.appendChild(el("span", "chip info", tr("skills-score") + " " + match.score));
+      row.appendChild(el("span", "skill-summary", match.summary[LANG] || match.summary.en));
+      box.appendChild(row);
+    });
+  } catch (err) {
+    if (err.status === 402) showUpgrade(err.detail || err.message);
+    else box.appendChild(el("div", "sol-note", "✗ " + err.message));
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+    initAuthArea();
+  }
+}
+
+async function healthCheck() {
+  try {
+    const h = await api("/health");
+    $("health-state").textContent = h.status || "ok";
+    $("health-state").style.color = "var(--ok)";
+    $("health-models").textContent = String(h.models);
+  } catch (e) {
+    $("health-state").textContent = "offline";
+    $("health-state").style.color = "var(--err)";
+    setBanner("warn", tr("api-down"));
+  }
+}
+
+/* ============================= Wiring ============================= */
 function init() {
+  try { LANG = localStorage.getItem("de_lang") || "fa"; } catch (_) { LANG = "fa"; }
+
   document.querySelectorAll(".lang-btn").forEach((b) => {
     b.addEventListener("click", () => {
       LANG = b.dataset.lang;
@@ -762,7 +1132,6 @@ function init() {
   document.querySelectorAll(".tab").forEach((t) => {
     t.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === t));
-      document.getElementById("panel-" + t.dataset.tab).classList.toggle("hidden", false);
       document.querySelectorAll(".panel").forEach((p) => {
         p.classList.toggle("hidden", p.id !== "panel-" + t.dataset.tab);
       });
@@ -779,56 +1148,22 @@ function init() {
   });
 
   $("btn-solve").addEventListener("click", runSolve);
+  $("btn-free-solve").addEventListener("click", () => runEquationSolve(true));
+  $("btn-free-classify").addEventListener("click", classifyEquation);
+
+  $("free-eq").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); runEquationSolve(true); }
+  });
 
   $("btn-example").addEventListener("click", () => {
     exampleIdx = (exampleIdx + 1) % EXAMPLE_CYCLE.length;
     selectModel(EXAMPLE_CYCLE[exampleIdx]);
   });
 
-  $("btn-free-solve").addEventListener("click", async () => {
-    setBanner("error", "");
-    const eq = $("free-eq").value.trim();
-    if (!eq) { setBanner("error", tr("free-sym-empty")); return; }
-    const btn = $("btn-free-solve");
-    btn.disabled = true;
-    try {
-      const data = await symbolicFree(eq, $("free-dep").value.trim() || "y", $("free-ind").value.trim() || "t");
-      renderFreeResult([[tr("sol-symbolic"), data.solution, true]]);
-    } catch (err) {
-      if (err.status === 402) showUpgrade(err.detail || err.message);
-      else setBanner("error", `✗ ${err.message}`);
-    } finally {
-      btn.disabled = false;
-      initAuthArea();
-    }
-  });
+  const pts = $("p-points-catalog");
+  if (pts) pts.addEventListener("input", updateCostHint);
 
-  $("btn-free-classify").addEventListener("click", async () => {
-    setBanner("error", "");
-    const text = $("free-eq").value.trim();
-    if (!text) { setBanner("error", tr("free-sym-empty")); return; }
-    const btn = $("btn-free-classify");
-    btn.disabled = true;
-    try {
-      const data = await classifyFree(text);
-      const d = data.data || {};
-      const lines = [
-        [tr("free-class-title") + " — model", d.model || "?", false],
-        ["variables", (d.variables || []).join(", "), false],
-        ["source", d.source || "local", false],
-        ["requires_external_api", String(d.requires_external_api), false],
-      ];
-      renderFreeResult(lines);
-    } catch (err) {
-      if (err.status === 402) showUpgrade(err.detail || err.message);
-      else setBanner("error", `✗ ${err.message}`);
-    } finally {
-      btn.disabled = false;
-      initAuthArea();
-    }
-  });
-
-  $("p-points").addEventListener("input", updateCostHint);
+  buildExampleChips();
   modelNames = Object.keys(MODEL_DEFS);
   applyLang();
   loadCosts();

@@ -1,0 +1,22 @@
+# Lint rules for the DiffEQ engine and its API.
+#
+#   .venv/bin/python -m ruff check api/     # or: bun run lint
+#
+# The rule set is deliberately limited to real defects: unused names, shadowed
+# builtins, bugbear traps (mutable defaults, loop-variable closures) and
+# modernised typing. Formatting opinions (line length) and the FastAPI
+# dependency-injection idiom are turned off rather than churned.
+line-length = 120
+target-version = "py310"
+
+# `.agents/skills` holds third-party skill bundles vendored verbatim (see
+# .agents/README.md). They are upstream authored, not ours to restyle, so the
+# engine's own rules are not applied to them.
+extend-exclude = [".agents"]
+
+[lint]
+select = ["E", "F", "W", "B", "UP", "RET"]
+ignore = [
+    "E501", # long lines are wrapped for clarity, not to a hard column
+    "B008", # FastAPI declares dependencies as Depends(...) in argument defaults
+]

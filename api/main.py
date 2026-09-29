@@ -20,16 +20,17 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from api import admin, auth, db, payments, plans, tokens
+from api import admin, auth, db, payments, plans, skills, tokens
 from api.ai_provider import AIProviderError, analyze_equation
+from api.equation_input import DEFAULT_SPAN, EquationError, solve_equation
 from api.local_intelligence import classify_equation
-from api.solver_core import MODEL_NAMES, STIFF_MODELS, SolverRequest, adapter_metadata, solve_builtin, try_symbolic_first_order
+from api.solver_core import MODEL_NAMES, STIFF_MODELS, SolverRequest, adapter_metadata, solve_builtin
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 db.init_db()
 
-app = FastAPI(title="Differential Equation Intelligence API", version="0.4.1")
+app = FastAPI(title="Differential Equation Intelligence API", version="0.5.0")
 
 # The UI is served by this same app, so no cross-origin access is granted on
 # purpose: a wildcard CORS policy would let any site script the API.
@@ -65,9 +66,44 @@ class SymbolicBody(BaseModel):
     independent: str = "t"
 
 
+class EquationBody(BaseModel):
+    """Free-form ODE: any notation, with optional initial conditions."""
+    equation: str = Field(min_length=1, max_length=2_000)
+    variable: str = Field(default="y", max_length=16)
+    independent: str = Field(default="t", max_length=16)
+    t_span: tuple[float, float] = DEFAULT_SPAN
+    initial_values: list[float] = Field(default_factory=list, max_length=4)
+    points: int = Field(default=200, ge=2, le=2_000)
+
+
+class PasswordBody(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
 class AnalyzeBody(BaseModel):
     text: str = Field(min_length=1, max_length=10_000)
     language: Literal["en", "fa"] = "en"
+
+
+class SkillMatchBody(BaseModel):
+    text: str = Field(min_length=1, max_length=10_000)
+    limit: int = Field(default=3, ge=1, le=8)
+
+
+class SkillRunBody(BaseModel):
+    """One skill call. Which fields matter depends on the skill."""
+    equation: str | None = Field(default=None, max_length=2_000)
+    system: list[str] | None = Field(default=None, max_length=8)
+    parameters: dict[str, float] | None = None
+    parameter: str | None = Field(default=None, max_length=16)
+    parameter_range: tuple[float, float] | None = None
+    initial_values: list[float] | None = Field(default=None, max_length=8)
+    t_span: tuple[float, float] | None = None
+    points: int = Field(default=200, ge=2, le=20_000)
+    terms: int | None = Field(default=None, ge=3, le=12)
+    steps: int | None = Field(default=None, ge=2, le=400)
+    language: Literal["en", "fa"] = "fa"
 
 
 class RegisterBody(BaseModel):
@@ -232,6 +268,21 @@ def me(request: Request) -> dict[str, Any]:
         "user": auth.public_user(user),
         "entitlement": plans.get_entitlement(user, session),
     }
+
+
+@app.post("/api/account/password")
+def change_password(body: PasswordBody, request: Request) -> dict[str, Any]:
+    """Rotate the signed-in account's password (used to replace the seeded
+    default admin password with one only the owner knows)."""
+    user = auth.require_user(request)
+    row = db.query_one("SELECT password_hash FROM users WHERE id = ?", (user["id"],))
+    if row is None or not auth.verify_password(body.current_password, row["password_hash"]):
+        raise HTTPException(401, "The current password is not correct")
+    if body.new_password == body.current_password:
+        raise HTTPException(422, "The new password must be different from the current one")
+    db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+               (auth.hash_password(body.new_password), user["id"]))
+    return {"ok": True, "message": "Password updated"}
 
 
 @app.get("/api/my-tokens")
@@ -424,6 +475,7 @@ def analyze(body: AnalyzeBody, request: Request, response: Response) -> dict[str
         raise _limit_response(exc) from exc
     local = classify_equation(body.text)
     local["language"] = body.language
+    local.update(_suggest_skill(body.text))
     owner, owner_id = _owner_keys(user, session)
     plans.record_usage(owner, owner_id, 0)
     remaining = entitlement["tokens"]
@@ -454,6 +506,10 @@ def enhanced_analyze(body: AnalyzeBody, request: Request,
         provider = "local-fallback"
     if result.get("model") not in MODEL_NAMES:
         raise HTTPException(422, "AI selected an unsupported model")
+    # Only a skill id the catalog knows may come back from the provider.
+    spec = skills.get_skill(str(result.get("skill") or ""))
+    result["skill"] = spec.id if spec else None
+    result["skill_name"] = {"en": spec.name_en, "fa": spec.name_fa} if spec else None
     owner, owner_id = _owner_keys(user, session)
     plans.record_usage(owner, owner_id, 0)
     remaining = entitlement["tokens"]
@@ -465,6 +521,104 @@ def enhanced_analyze(body: AnalyzeBody, request: Request,
     }
 
 
+# ---------------------------------------------------------------------------
+# Skills: named capabilities the engine and its AI layer share
+# ---------------------------------------------------------------------------
+@app.get("/skills")
+def list_skills() -> dict[str, object]:
+    """The skills catalog: free to read, so an agent can plan before spending."""
+    return {"status": "ok", "count": len(skills.SKILLS), "skills": skills.skill_catalog()}
+
+
+@app.post("/skills/match")
+def match_skills(body: SkillMatchBody, request: Request, response: Response) -> dict[str, object]:
+    """Rank skills against a plain-language request (offline, deterministic)."""
+    entitlement, user, session = _resolve_entitlement(request, response)
+    cost = tokens.TOOL_COSTS["analyze"]
+    try:
+        plans.check_access(entitlement, cost, "Skill match")
+    except plans.LimitError as exc:
+        raise _limit_response(exc) from exc
+    try:
+        matches = skills.match_skills(body.text, body.limit)
+    except EquationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    remaining = _record_tool(entitlement, user, session, cost, "skills:match")
+    return {
+        "status": "matched",
+        "matches": matches,
+        "entitlement": _token_summary(entitlement, cost, remaining),
+    }
+
+
+@app.post("/skills/{skill_id}")
+def run_skill_endpoint(skill_id: str, body: SkillRunBody, request: Request,
+                       response: Response) -> dict[str, object]:
+    """Run one named skill. A skill that cannot answer costs nothing."""
+    spec = skills.get_skill(skill_id)
+    if spec is None:
+        raise HTTPException(404, f"Unknown skill '{skill_id}'")
+    entitlement, user, session = _resolve_entitlement(request, response)
+    cost = tokens.skill_cost(spec.id, spec.cost)
+    try:
+        plans.check_access(entitlement, cost, f"Skill: {spec.name_en}")
+    except plans.LimitError as exc:
+        raise _limit_response(exc) from exc
+    arguments = body.model_dump()
+    arguments.pop("language", None)
+    result = skills.run_skill(spec.id, arguments)
+    payload = _sanitize(result)
+    payload["skill"] = spec.id
+    payload["skill_name"] = {"en": spec.name_en, "fa": spec.name_fa}
+    if payload["status"] != "success":
+        payload["entitlement"] = _token_summary(entitlement, 0, entitlement["tokens"])
+        return payload
+    remaining = _record_tool(entitlement, user, session, cost, f"skills:{spec.id}")
+    payload["entitlement"] = _token_summary(entitlement, cost, remaining)
+    payload["verified"] = payload.get("residual_max") is not None and payload.get("kind") != "series"
+    return payload
+
+
+def _suggest_skill(text: str) -> dict[str, Any]:
+    """Best-matching skill for a request, or nulls when nothing matches."""
+    try:
+        matches = skills.match_skills(text, 1)
+    except EquationError:
+        return {"skill": None, "skill_name": None}
+    if not matches:
+        return {"skill": None, "skill_name": None}
+    return {"skill": matches[0]["id"], "skill_name": matches[0]["name"]}
+
+
+def _equation_payload(body: EquationBody) -> dict[str, Any]:
+    """Run the free-form intake: exact form first, numerical curve as fallback.
+
+    The result goes through `_sanitize` because a failed residual estimate is an
+    infinity, which is not valid JSON.
+    """
+    try:
+        result = solve_equation(
+            body.equation,
+            variable=body.variable or "y",
+            independent=body.independent or "t",
+            t_span=(float(body.t_span[0]), float(body.t_span[1])),
+            initial=list(body.initial_values),
+            points=body.points,
+        )
+    except EquationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return _sanitize(result)
+
+
+def _record_tool(entitlement: dict[str, Any], user: dict[str, Any] | None,
+                 session: dict[str, Any] | None, cost: int, reason: str) -> int | None:
+    owner, owner_id = _owner_keys(user, session)
+    plans.record_usage(owner, owner_id, 0)
+    if entitlement.get("unlimited"):
+        return entitlement["tokens"]
+    return tokens.charge(owner, owner_id, cost, reason)
+
+
 @app.post("/solve/symbolic")
 def symbolic(body: SymbolicBody, request: Request, response: Response) -> dict[str, object]:
     # Symbolic solves consume tokens like any other tool — no free bypass.
@@ -474,17 +628,53 @@ def symbolic(body: SymbolicBody, request: Request, response: Response) -> dict[s
         plans.check_access(entitlement, cost, "Symbolic solve")
     except plans.LimitError as exc:
         raise _limit_response(exc) from exc
-    result = try_symbolic_first_order(body.equation, body.variable, body.independent)
-    if result is None:
-        raise HTTPException(422, "No verified symbolic solution was found")
-    owner, owner_id = _owner_keys(user, session)
-    plans.record_usage(owner, owner_id, 0)
-    remaining = entitlement["tokens"]
-    if not entitlement.get("unlimited"):
-        remaining = tokens.charge(owner, owner_id, cost, "symbolic")
-    payload = {"status": "success", "solution": result, "verified": False,
-               "message": "Symbolic result requires numerical verification for the supplied conditions."}
+    try:
+        result = solve_equation(
+            body.equation, variable=body.variable or "y",
+            independent=body.independent or "t", points=64, symbolic_only=True,
+        )
+    except EquationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if result.get("status") != "success" or not result.get("solution"):
+        raise HTTPException(422, "No exact solution was found for this equation")
+    remaining = _record_tool(entitlement, user, session, cost, "symbolic")
+    return {
+        "status": "success",
+        "solution": result["solution"],
+        "verified": False,
+        "kind": result["kind"],
+        "order": result["order"],
+        "message": result["message"],
+        "entitlement": _token_summary(entitlement, cost, remaining),
+    }
+
+
+@app.post("/solve/equation")
+def solve_free_equation(body: EquationBody, request: Request,
+                        response: Response) -> dict[str, object]:
+    """The main free-form endpoint: accepts any notation, always answers.
+
+    ``-2*y + sin(t)``, ``y' = -2*y``, ``dy/dt = -2*y``, ``y' + 2*y = 0``,
+    ``y'' + 2*y' + y = 0`` and inline conditions (``y' = -2y, y(0) = 1``) all work.
+    """
+    entitlement, user, session = _resolve_entitlement(request, response)
+    cost = tokens.TOOL_COSTS["symbolic"]
+    try:
+        plans.check_access(entitlement, cost, "Equation solve")
+    except plans.LimitError as exc:
+        raise _limit_response(exc) from exc
+    payload = _equation_payload(body)
+    if payload["status"] != "success":
+        # Nothing was solved, so nothing is charged.
+        payload["entitlement"] = _token_summary(entitlement, 0, entitlement["tokens"])
+        return payload
+    remaining = _record_tool(entitlement, user, session, cost, "solve:equation")
     payload["entitlement"] = _token_summary(entitlement, cost, remaining)
+    payload["model_guess"] = classify_equation(body.equation)["model"]
+    payload["skill_guess"] = _suggest_skill(body.equation)["skill"]
+    # Exact answers are checked by construction; a numerical curve reports its
+    # own residual; a Taylor series is an approximation and says so.
+    payload["verified"] = payload["residual_max"] is not None and payload["kind"] != "series"
     return payload
 
 
