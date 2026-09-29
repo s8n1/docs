@@ -104,8 +104,49 @@ def validate_request(request: SolverRequest) -> None:
 # ---------------------------------------------------------------------------
 # Numeric ODE core
 # ---------------------------------------------------------------------------
+def integration_error(rhs: Callable[[float, np.ndarray], np.ndarray], t_span: tuple[float, float],
+                      y0: np.ndarray, t_eval: np.ndarray, method: str, rtol: float, atol: float,
+                      max_step: float, values: np.ndarray) -> float:
+    """How accurate a solution actually is, measured against a tighter integration.
+
+    Integrating the same problem again two orders of magnitude tighter gives a
+    reference whose own error is negligible beside the solution under test, so
+    the largest deviation from it is the accuracy achieved rather than a
+    property of the sampling grid.
+
+    The check this replaces differentiated the returned samples and compared
+    them with the right-hand side. That is the defect of the *output* grid —
+    ``O(h^2 |y'''|)`` — so a correct chaotic or stiff solution reported a
+    "residual" of order 10 while being accurate to ``1e-7``, and the number
+    moved whenever the caller asked for a different number of points. It is also
+    what the UI displays as a verification badge, so it has to mean what it says.
+
+    ``inf`` means no reference could be produced (it diverged, or the problem is
+    not integrable at tighter tolerance); the API renders that as "unverified"
+    instead of inventing a number.
+
+    Caveat: on a chaotic system over a long interval the deviation also contains
+    sensitivity amplification, which is genuine unpredictability rather than
+    integration error.
+    """
+    try:
+        reference = solve_ivp(rhs, t_span, y0, method=method, t_eval=t_eval,
+                              rtol=max(rtol / 100.0, 1e-13), atol=max(atol / 100.0, 1e-15),
+                              max_step=max_step)
+    except Exception:                                  # noqa: BLE001 - the estimate is a diagnostic
+        return float("inf")
+    if not reference.success:
+        return float("inf")
+    reference_values = np.asarray(reference.y).T
+    if reference_values.shape != values.shape:
+        return float("inf")
+    if not (np.all(np.isfinite(reference_values)) and np.all(np.isfinite(values))):
+        return float("inf")
+    return float(np.max(np.abs(reference_values - values)))
+
+
 def _solve_ode(request: SolverRequest, rhs: Callable[[float, np.ndarray], np.ndarray], method: str | None = None) -> SolverResult:
-    """General-purpose ODE integrator with residual check."""
+    """General-purpose ODE integrator; the residual is the achieved accuracy."""
     validate_request(request)
     method = method or request.method
     y0 = np.asarray(request.initial_values, dtype=float)
@@ -115,18 +156,18 @@ def _solve_ode(request: SolverRequest, rhs: Callable[[float, np.ndarray], np.nda
         if val.shape != y.shape or not np.all(np.isfinite(val)):
             raise ValueError("RHS returned invalid state")
         return val
+    max_step = max((request.t_span[1] - request.t_span[0]) / 10, 1e-12)
     try:
         sol = solve_ivp(bounded_rhs, request.t_span, y0, method=method,
                         t_eval=t_eval, rtol=request.rtol, atol=request.atol,
-                        max_step=max((request.t_span[1] - request.t_span[0]) / 10, 1e-12))
+                        max_step=max_step)
     except (ValueError, FloatingPointError) as exc:
         return SolverResult("failed", method, [], [], float("inf"), str(exc))
     if not sol.success:
         return SolverResult("failed", method, sol.t.tolist(), sol.y.T.tolist(), float("inf"), sol.message)
     vals = sol.y.T
-    deriv = np.gradient(vals, sol.t, axis=0) if len(sol.t) > 2 else vals * 0
-    expected = np.vstack([bounded_rhs(t, y) for t, y in zip(sol.t, vals, strict=False)])
-    res = float(np.max(np.abs(deriv - expected))) if len(sol.t) > 2 else 0.0
+    res = integration_error(bounded_rhs, request.t_span, y0, t_eval, method,
+                            request.rtol, request.atol, max_step, vals)
     return SolverResult("success", method, sol.t.tolist(), vals.tolist(), res, sol.message)
 
 def _fit_first_order_constant(sol: Any, y_fn: Function, t_sym: Symbol, t0: float, y0: float) -> Any | None:

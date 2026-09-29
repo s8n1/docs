@@ -284,6 +284,41 @@ def test_stiff_auto_selects_bdf():
     assert res.method == "BDF"
     assert res.y[-1][0] < 1e-5
 
+def test_residual_measures_accuracy_not_output_grid():
+    """A fast system must not report a large residual for a correct solution.
+
+    The residual used to be the defect of the output grid — ``O(h^2 |y'''|)`` —
+    which made a chaotic system look broken: Lorenz sampled at 20 points
+    reported ~8.4 while being accurate to 5.5e-07.
+    """
+    def residual(points: int) -> float:
+        res = solve_builtin(SolverRequest("lorenz", ("x", "y", "z"), (0.0, 0.2),
+                                         (1.0, 1.0, 1.0), {}, method="RK45", points=points))
+        assert res.status == "success"
+        return res.residual_max
+
+    coarse, dense = residual(20), residual(200)
+    assert coarse < 1e-5
+    assert dense < 1e-5
+    # The estimate describes the integration, not how finely the curve is sampled.
+    assert coarse < 10 * dense
+
+def test_stiff_residual_is_small():
+    res = solve_builtin(SolverRequest("system_stiff", ("y",), (0.0, 0.1), (1.0,),
+                                      {"rate": 1000.0}, points=20))
+    assert res.method == "BDF"
+    assert res.residual_max < 1e-6
+
+def test_residual_tracks_the_accuracy_actually_achieved():
+    """Tightening the tolerances must lower the reported residual."""
+    def residual(rtol: float, atol: float) -> float:
+        res = solve_builtin(SolverRequest("system_linear", ("y",), (0.0, 1.0), (1.0,),
+                                         {}, points=100, rtol=rtol, atol=atol))
+        assert res.status == "success"
+        return res.residual_max
+
+    assert residual(1e-9, 1e-11) < residual(1e-4, 1e-6)
+
 # ======================================================================
 # Local classifier and symbolic parser
 # ======================================================================
