@@ -594,10 +594,28 @@ def _run_equilibria(payload: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # 5. Lyapunov spectrum
 # ---------------------------------------------------------------------------
+# The finite-time estimate is a running average of a fluctuating quantity, so it
+# converges slowly and **from below** on a chaotic attractor: the raw average
+# reads +0.13 at T=5 and +0.56 at T=50 on Lorenz, whose literature value is
+# +0.906. Read without qualification that makes chaos look tame. Three things fix
+# it: start accumulating only after the initial transient has decayed, default to
+# an interval long enough to converge, and report the spread across equal
+# sub-intervals as an error bar, so a short interval is flagged rather than
+# believed.
+LYAPUNOV_DEFAULT_SPAN = (0.0, 200.0)
+LYAPUNOV_TRANSIENT_FRACTION = 0.1
+LYAPUNOV_BLOCKS = 10
+# A leading exponent whose error bar exceeds this fraction of its own value has
+# not settled; calling the flow chaotic or stable from it would be a guess.
+LYAPUNOV_MAX_RELATIVE_ERROR = 0.10
+LYAPUNOV_NEUTRAL_TOLERANCE = 1e-3
+
+
 def _run_lyapunov(payload: dict[str, Any]) -> dict[str, Any]:
     system = _system_from(payload)
     size = system.size
-    span = _span(payload.get("t_span"))
+    requested = payload.get("t_span")
+    span = _span(requested) if requested else LYAPUNOV_DEFAULT_SPAN
     state = _floats(payload.get("initial_values"), size)
     rhs = system._compile()
     jacobian = system._compile(system.jacobian_symbolic)
@@ -607,6 +625,12 @@ def _run_lyapunov(payload: dict[str, Any]) -> dict[str, Any]:
     h = (span[1] - span[0]) / steps
     orthogonal = np.eye(size)
     sums = np.zeros(size)
+    transient_steps = int(steps * LYAPUNOV_TRANSIENT_FRACTION)
+    block_steps = max(1, (steps - transient_steps) // LYAPUNOV_BLOCKS)
+    block_sums: list[np.ndarray] = []
+    running = np.zeros(size)
+    running_steps = 0
+    settled_steps = 0
     trajectory_t: list[float] = []
     trajectory_y: list[list[float]] = []
     t = span[0]
@@ -632,23 +656,69 @@ def _run_lyapunov(payload: dict[str, Any]) -> dict[str, Any]:
             break
         diagonal = np.abs(np.diag(upper))
         diagonal[diagonal < 1e-300] = 1e-300
-        sums += np.log(diagonal)
+        logs = np.log(diagonal)
         t += h
         if step % max(1, steps // 200) == 0:
             trajectory_t.append(float(t))
             trajectory_y.append([float(v) for v in state])
+        if step < transient_steps:
+            # Still settling onto the attractor; counting these steps biases
+            # every exponent, and toward zero worst of all.
+            continue
+        sums += logs
+        running += logs
+        running_steps += 1
+        settled_steps += 1
+        if running_steps == block_steps:
+            block_sums.append(running / (running_steps * h))
+            running = np.zeros(size)
+            running_steps = 0
 
-    elapsed = max(t - span[0], 1e-12)
+    if settled_steps < 2:
+        return _failure("The system could not be integrated long enough to estimate the spectrum.",
+                        "Use a longer t_span, or different initial values.")
+    elapsed = settled_steps * h
     exponents = sums / elapsed
     if not np.all(np.isfinite(exponents)):
         return _failure("The Lyapunov spectrum could not be estimated on this interval.")
 
+    # The spread between equal sub-intervals is the honest error bar: it measures
+    # how far the running average is from having converged.
+    blocks = np.asarray(block_sums)
+    if blocks.shape[0] >= 2:
+        standard_error = blocks.std(axis=0) / np.sqrt(blocks.shape[0])
+    else:
+        standard_error = np.full(size, float("nan"))
+
     largest = float(np.max(exponents))
-    text = "\n".join(f"lambda{i + 1} = {value:+.6f}" for i, value in enumerate(exponents))
-    if largest > 1e-3:
+    leading_error = float(standard_error[int(np.argmax(exponents))])
+    if abs(largest) <= LYAPUNOV_NEUTRAL_TOLERANCE:
+        converged = bool(np.isfinite(leading_error) and leading_error <= LYAPUNOV_NEUTRAL_TOLERANCE)
+    else:
+        converged = bool(np.isfinite(leading_error)
+                         and leading_error / abs(largest) <= LYAPUNOV_MAX_RELATIVE_ERROR)
+
+    text = "\n".join(
+        f"lambda{i + 1} = {value:+.6f}" + (f" +/- {error:.6f}" if np.isfinite(error) else "")
+        for i, (value, error) in enumerate(zip(exponents, standard_error, strict=True))
+    )
+    text += (f"\nover t = {span[0]:g}..{t:g}, first "
+             f"{LYAPUNOV_TRANSIENT_FRACTION:.0%} discarded as transient")
+
+    if not converged:
+        if np.isfinite(leading_error) and abs(largest) > LYAPUNOV_NEUTRAL_TOLERANCE:
+            spread = f"{100 * leading_error / abs(largest):.0f}% of its value"
+        else:
+            spread = "a spread too large to resolve"
+        message = "Not converged: this interval is too short for a reliable exponent."
+        hint = (f"The running average is still drifting ({largest:+.3f} +/- "
+                f"{leading_error:.3f}, {spread}), so it should not be read as the true value. "
+                f"Use a longer t_span — a few hundred time units are usually enough — and the "
+                f"error bar shrinks.")
+    elif largest > LYAPUNOV_NEUTRAL_TOLERANCE:
         hint = "A positive leading exponent means nearby trajectories separate: chaotic behaviour."
         message = "Chaotic: the largest Lyapunov exponent is positive."
-    elif largest < -1e-3:
+    elif largest < -LYAPUNOV_NEUTRAL_TOLERANCE:
         hint = "All exponents are negative: nearby trajectories converge to an attractor."
         message = "Stable: every Lyapunov exponent is negative."
     else:
@@ -658,7 +728,10 @@ def _run_lyapunov(payload: dict[str, Any]) -> dict[str, Any]:
                     t=trajectory_t, y=trajectory_y, residual=0.0,
                     message=message, hint=hint,
                     metadata={"exponents": [float(v) for v in exponents],
-                              "largest": largest})
+                              "largest": largest,
+                              "standard_error": [float(v) for v in standard_error],
+                              "reliable": converged,
+                              "interval": [float(span[0]), float(t)]})
 
 
 # ---------------------------------------------------------------------------
@@ -967,8 +1040,10 @@ SKILLS: tuple[SkillSpec, ...] = (
     SkillSpec(
         id="lyapunov_spectrum", name_en="Lyapunov spectrum", name_fa="طیف لیاپانوف",
         category="analysis", kind="numeric", cost=5,
-        summary_en="Benettin QR estimate of every Lyapunov exponent, so chaos is measurable.",
-        summary_fa="تخمین QR بنتین برای همهٔ نمای‌های لیاپانوف، برای سنجش آشوب.",
+        summary_en=("Benettin QR estimate of every Lyapunov exponent, transient discarded, "
+                    "with an error bar so an unconverged span is visible."),
+        summary_fa=("تخمین QR بنتین برای همهٔ نمای‌های لیاپانوف با حذف حالت گذرا و "
+                    "نوار خطا، تا بازهٔ ناکافی مشخص باشد."),
         when_en="Use when trajectories look irregular and you need a number for it.",
         when_fa="وقتی مسیرها بی‌نظم به‌نظر می‌رسند و به یک عدد نیاز دارید.",
         keywords=("lyapunov", "chaos", "chaotic", "divergence", "exponent",

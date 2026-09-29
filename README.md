@@ -286,7 +286,7 @@ before spending anything.
 | `power_series` | series solution keeping `C1`/`C2` |
 | `frobenius` | indicial equation + series at a regular singular point, including whether a logarithm is needed |
 | `equilibria_stability` | every equilibrium of a first-order system with its Jacobian classification |
-| `lyapunov_spectrum` | Benettin QR estimate of the full Lyapunov spectrum (Lorenz → `+0.85, 0, −14.5`) |
+| `lyapunov_spectrum` | Benettin QR estimate of the full Lyapunov spectrum, transient discarded and an error bar reported (Lorenz → `+0.90 ± 0.02, 0, −14.5`; a span too short to converge is reported as *not converged* instead of believed) |
 | `bifurcation_sweep` | equilibrium branch continued across a parameter, with the stability transitions flagged |
 | `sensitivity_analysis` | variational equations for `∂y(t)/∂y(0)` and the amplification factor |
 | `stiffness_scan` | stiffness ratio along a trajectory plus a method recommendation |

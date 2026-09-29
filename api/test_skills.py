@@ -177,6 +177,7 @@ def test_lyapunov_exponent_is_negative_for_a_stable_node():
     result = _ok("lyapunov_spectrum", system=["y' = -3*y"],
                  initial_values=[1.0], t_span=[0.0, 20.0])
     assert result["metadata"]["largest"] == pytest.approx(-3.0, abs=0.05)
+    assert result["metadata"]["reliable"] is True
     assert "Stable" in result["message"]
 
 
@@ -190,13 +191,47 @@ def test_lyapunov_spectrum_of_lorenz_is_chaotic():
     result = _ok("lyapunov_spectrum",
                  system=["dx/dt = 10*(y - x)", "dy/dt = x*(28 - z) - y",
                          "dz/dt = x*y - 8*z/3"],
-                 initial_values=[1.0, 1.0, 1.0], t_span=[0.0, 60.0])
+                 initial_values=[1.0, 1.0, 1.0], t_span=[0.0, 200.0])
     exponents = result["metadata"]["exponents"]
     assert exponents[0] > 0.5, exponents
     assert abs(exponents[1]) < 0.2, exponents
     assert exponents[2] < -12.0, exponents
     # The sum equals the divergence of the flow, trace(J) = -10 - 1 - 8/3.
     assert sum(exponents) == pytest.approx(-41.0 / 3.0, rel=1e-3)
+    assert "Chaotic" in result["message"]
+    # Converged, and within a few percent of the literature value for these
+    # parameters (0.906).
+    assert result["metadata"]["reliable"] is True
+    assert exponents[0] == pytest.approx(0.906, abs=0.05)
+
+
+def test_lyapunov_warns_instead_of_believing_a_short_interval():
+    """A short run used to report +0.13 on Lorenz, whose true value is +0.906.
+
+    The estimator converges from below, so believing it made chaos look tame.
+    A span that is too short must now be flagged, never passed off as the
+    exponent.
+    """
+    result = _ok("lyapunov_spectrum",
+                 system=["dx/dt = 10*(y - x)", "dy/dt = x*(28 - z) - y",
+                         "dz/dt = x*y - 8*z/3"],
+                 initial_values=[1.0, 1.0, 1.0], t_span=[0.0, 5.0])
+    assert result["metadata"]["reliable"] is False
+    assert "Not converged" in result["message"]
+    assert "t_span" in result["hint"]
+    # The value is still offered, but with its error bar attached.
+    assert "+/-" in result["solution"]
+
+
+def test_lyapunov_default_span_is_long_enough_to_converge():
+    """Omitting t_span must not fall back to the free-form solver's short default."""
+    result = _ok("lyapunov_spectrum",
+                 system=["dx/dt = 10*(y - x)", "dy/dt = x*(28 - z) - y",
+                         "dz/dt = x*y - 8*z/3"],
+                 initial_values=[1.0, 1.0, 1.0])
+    assert result["metadata"]["reliable"] is True
+    assert result["metadata"]["interval"][1] >= 100.0
+    assert result["metadata"]["largest"] == pytest.approx(0.906, abs=0.06)
     assert "Chaotic" in result["message"]
 
 

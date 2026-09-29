@@ -23,7 +23,7 @@ one renderer handles all of them.
 | `power_series` | symbolic | 3 | Series solution about a point, keeping the free constants `C1`/`C2`. |
 | `frobenius` | symbolic | 4 | Indicial equation and series at a regular singular point (Bessel, Legendre, …), including whether the second solution needs a logarithm. |
 | `equilibria_stability` | analysis | 3 | Every equilibrium of a first-order system with its Jacobian classification (node, spiral, saddle, centre). |
-| `lyapunov_spectrum` | analysis | 5 | Benettin QR estimate of the full Lyapunov spectrum, so chaos is a number rather than an impression. |
+| `lyapunov_spectrum` | analysis | 5 | Benettin QR estimate of the full Lyapunov spectrum, so chaos is a number rather than an impression. The initial transient is discarded, the default span is long enough to converge, and every exponent carries an error bar taken from the spread across sub-intervals. A span too short to converge is reported as **not converged** rather than believed — the finite-time estimate drifts upward on a chaotic attractor, so a short run understates the exponent. |
 | `bifurcation_sweep` | analysis | 6 | Continues the equilibrium branch across a parameter and flags where stability changes. |
 | `sensitivity_analysis` | analysis | 4 | Integrates the variational equations for `∂y(t)/∂y(0)` and reports the amplification. |
 | `stiffness_scan` | analysis | 3 | Eigenvalues of the Jacobian along a trajectory give the stiffness ratio and a method recommendation. |
@@ -56,8 +56,15 @@ curl -X POST "$BASE/skills/match" -H 'content-type: application/json' \
 ```bash Run the Lyapunov skill on the Lorenz system
 curl -X POST "$BASE/skills/lyapunov_spectrum" -H 'content-type: application/json' \
   -d '{"system": ["dx/dt = 10*(y - x)", "dy/dt = x*(28 - z) - y", "dz/dt = x*y - 8*z/3"],
-       "initial_values": [1, 1, 1], "t_span": [0, 60]}'
-# → lambda1 ≈ +0.80, lambda2 ≈ 0, lambda3 ≈ -14.4
+       "initial_values": [1, 1, 1]}'
+# → lambda1 = +0.9079 +/- 0.0296, lambda2 = -0.0073 +/- 0.0140,
+#   lambda3 = -14.5671 +/- 0.0175            (t defaults to 0..200)
+# literature for these parameters: +0.906, 0, -14.57
+
+# A span too short to converge is flagged, not passed off as the exponent:
+#   "t_span": [0, 5]
+# → "Not converged: this interval is too short for a reliable exponent."
+#   lambda1 = -0.3728 +/- 0.3969   (over t = 0..5, first 10% discarded as transient)
 ```
 
 ```bash Frobenius series for Bessel
