@@ -752,7 +752,11 @@ function renderEquationResult(data, target) {
   }
 
   if (data.message) {
-    const note = el("div", "sol-note" + (success ? " ok" : ""), (success ? "✓ " : "✗ ") + data.message);
+    // A result can compute fine yet still be unreliable (an unconverged
+    // Lyapunov estimate); that must read as a warning, not a success tick.
+    const warned = !!(data.metadata && data.metadata.reliable === false);
+    const mark = !success ? "✗ " : (warned ? "⚠ " : "✓ ");
+    const note = el("div", "sol-note" + (success && !warned ? " ok" : ""), mark + data.message);
     pane.appendChild(note);
   }
   const kindNote = KIND_NOTE[data.kind];
