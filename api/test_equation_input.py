@@ -86,10 +86,19 @@ def test_no_closed_form_falls_back_to_taylor_series():
     result = _solve("y' = y^2 + t^2", t_span=(0.0, 1.0), initial=[0.5])
     assert result["kind"] == "series"
     assert "t**" in result["solution"]
-    # The series cannot be summed, so the numerical curve supplies the residual.
+    # The series cannot be summed, so the numerical curve supplies the residual,
+    # which is the accuracy achieved (see solver_core.integration_error).
     assert result["residual_max"] is not None
-    assert 0.0 <= result["residual_max"] < 1.0
+    assert 0.0 <= result["residual_max"] < 1e-5
     assert len(result["y"]) == len(result["t"]) >= 2
+
+
+def test_numeric_residual_is_independent_of_curve_density():
+    """Asking for more points must not inflate the reported residual."""
+    sparse = _solve("y' = y^2 + t^2", t_span=(0.0, 1.0), initial=[0.5], points=10)
+    dense = _solve("y' = y^2 + t^2", t_span=(0.0, 1.0), initial=[0.5], points=400)
+    assert sparse["residual_max"] < 1e-5
+    assert dense["residual_max"] < 1e-5
 
 
 def test_riccati_equation_reduces_to_a_linear_second_order_problem():

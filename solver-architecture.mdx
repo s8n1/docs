@@ -21,6 +21,8 @@ The solver follows this order:
 6. Validate the result with residuals, initial/boundary conditions, convergence, and solver diagnostics.
 7. Return a complete answer, an approximate answer, or the furthest verified partial result with a technical reason.
 
+The `residual` reported with a numerical answer is the accuracy actually achieved: the same problem is integrated again at tolerances two orders of magnitude tighter, and the largest deviation from that reference is reported. It therefore describes the integration rather than the sampling grid — a fast or stiff system that is solved correctly reports a small value, and asking for more points does not change it. `null` means no reference could be produced, and the answer is marked unverified rather than given a number.
+
 Both the symbolic sweep and the numerical integration run under hard time, memory, step-count and magnitude caps, so a singular equation such as `y' = tan(y)` is bounded rather than hanging the request.
 
 ترتیب پردازش:
@@ -32,6 +34,8 @@ Both the symbolic sweep and the numerical integration run under hard time, memor
 5. در نهایت، استفاده از حل عددی
 6. بررسی residual، شرایط اولیه/مرزی، همگرایی و خطا
 7. ارائهٔ جواب کامل، تقریبی یا بیشترین نتیجهٔ معتبر به‌همراه دلیل فنی
+
+مقدار `residual` که همراه جواب عددی گزارش می‌شود، همان دقت واقعی به‌دست‌آمده است: همان مسئله با تلورانسی صد برابر سخت‌گیرانه‌تر یک بار دیگر حل می‌شود و بیشترین اختلاف با آن مرجع گزارش می‌گردد. پس این عدد به شبکهٔ نمونه‌برداری بستگی ندارد و دستگاه سریع یا سخت که درست حل شده باشد، مقدار کوچکی نشان می‌دهد؛ تعداد نقاط بیشتر هم آن را تغییر نمی‌دهد. مقدار `null` یعنی مرجعی تولید نشده و جواب «تأییدنشده» علامت می‌خورد، نه اینکه عددی از خود ساخته شود.
 
 حل نمادین و حل عددی هر دو با محدودیت زمان، حافظه، تعداد گام و بزرگی مقدار اجرا می‌شوند؛ بنابراین معادله‌های تکین مانند `y' = tan(y)` به‌جای معطل‌گذاشتن درخواست، محدود می‌شوند.
 

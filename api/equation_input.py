@@ -45,6 +45,8 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
+from api.solver_core import integration_error
+
 MAX_LENGTH = 2_000
 DEFAULT_SPAN = (0.0, 5.0)
 MAX_POINTS = 2_000
@@ -153,6 +155,8 @@ SYMBOLIC_MEMORY_CAP_MB = 768
 NUMERIC_TIMEOUT_SECONDS = 5.0
 NUMERIC_MAX_EVALS = 200_000
 NUMERIC_MAX_MAGNITUDE = 1e12
+NUMERIC_RTOL = 1e-8
+NUMERIC_ATOL = 1e-10
 
 
 class EquationError(ValueError):
@@ -1012,7 +1016,7 @@ def solve_numeric(parsed: ParsedEquation, t_span: tuple[float, float], initial: 
     for method in ("RK45", "BDF", "Radau"):
         try:
             solution = solve_ivp(wrapped, t_span, state0, method=method, t_eval=grid,
-                                 rtol=1e-8, atol=1e-10, max_step=np.inf)
+                                 rtol=NUMERIC_RTOL, atol=NUMERIC_ATOL, max_step=np.inf)
         except Exception:                             # noqa: BLE001 - report, then retry stiff
             continue
         if not solution.success or solution.y.shape[1] != grid.size:
@@ -1021,23 +1025,16 @@ def solve_numeric(parsed: ParsedEquation, t_span: tuple[float, float], initial: 
         if not np.all(np.isfinite(values)):
             continue
         rows = [[float(v) for v in row] for row in values]
-        residual = _residual(parsed, raw, solution.t, values)
+        # Measuring the accuracy means integrating the same problem again at a
+        # tighter tolerance, which spends another sweep of evaluations. Give it a
+        # fresh evaluation allowance: the wall-clock deadline set above is shared
+        # and still caps the total, so a pathological case degrades to
+        # "unverified" rather than to a slow request.
+        allowance = NUMERIC_MAX_EVALS
+        residual = integration_error(wrapped, t_span, state0, grid, method,
+                                     NUMERIC_RTOL, NUMERIC_ATOL, np.inf, values)
         return solution.t.tolist(), rows, residual, method
     return None
-
-
-def _residual(parsed: ParsedEquation, wrapped, t_vals: np.ndarray, values: np.ndarray) -> float:
-    if t_vals.size < 3:
-        return 0.0
-    try:
-        deriv = np.gradient(values, t_vals, axis=0)
-        expected = np.vstack([wrapped(t, row) for t, row in zip(t_vals, values, strict=False)])
-        diff = np.abs(deriv - expected)
-        if not np.all(np.isfinite(diff)):
-            return float("inf")
-        return float(np.max(diff))
-    except Exception:                                  # noqa: BLE001 - residual is a diagnostic
-        return float("inf")
 
 
 # ---------------------------------------------------------------------------
@@ -1310,7 +1307,11 @@ def solve_equation(text: str, variable: str = "y", independent: str = "t",
             "kind": "series",
             "method": "series",
             "solution": series.pretty,
-            "residual_max": 0.0,
+            # A truncated series has no accuracy of its own to report: the
+            # numerical curve below overwrites this when one can be produced, and
+            # otherwise the honest answer is "unknown" rather than "0", which
+            # would claim an approximation is exact.
+            "residual_max": None,
             "message": _kind_message("series", False),
             "hint": (f"Expansion around {parsed.independent} = {span[0]:g} with "
                      f"{parsed.variable}({span[0]:g}) = {curve_initial[0]:g}"),
@@ -1319,6 +1320,9 @@ def solve_equation(text: str, variable: str = "y", independent: str = "t",
             sampled = _sample_series(series, parsed, span, count)
             if sampled is not None:
                 payload["t"], payload["y"] = sampled
+                notes = [str(payload.get("hint") or "").strip(),
+                         "The curve is the truncated series itself, so no error estimate is reported."]
+                payload["hint"] = " ".join(note for note in notes if note)
         return payload
 
     # 3. Last resort: the numerical solution on its own.
