@@ -24,6 +24,16 @@ def _config() -> tuple[str, str, str]:
     return api_key, base_url.rstrip("/"), model
 
 
+def _skills_brief() -> str:
+    """One-line-per-skill catalog for the prompt (imported lazily to avoid a cycle)."""
+    from api.skills import skill_catalog
+
+    return "; ".join(
+        f"{entry['id']} ({entry['category']}): {entry['summary']['en']}"
+        for entry in skill_catalog()
+    )
+
+
 def analyze_equation(user_text: str, language: str = "en") -> dict[str, Any]:
     """Ask an OpenAI-compatible provider for JSON metadata only.
 
@@ -39,9 +49,11 @@ def analyze_equation(user_text: str, language: str = "en") -> dict[str, Any]:
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": (
-                "Return JSON only with keys model, variables, parameters, "
+                "Return JSON only with keys model, skill, variables, parameters, "
                 "initial_values, t_span, and explanation. Never return code. "
-                "Choose only from the supported model catalog."
+                "Choose 'model' only from the supported model catalog. "
+                "Choose 'skill' only from this catalog, or null when none fits: "
+                + _skills_brief()
             )},
             {"role": "user", "content": json.dumps({"language": language, "text": user_text})},
         ],

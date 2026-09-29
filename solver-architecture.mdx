@@ -16,18 +16,41 @@ The solver follows this order:
 1. Normalize the input into a safe mathematical representation.
 2. Classify it against the supported model catalog.
 3. Attempt symbolic solving.
-4. Fall back to numerical solving when a closed form is unavailable.
-5. Validate the result with residuals, initial/boundary conditions, convergence, and solver diagnostics.
-6. Return a complete answer, an approximate answer, or the furthest verified partial result with a technical reason.
+4. If no closed form exists, keep descending the answer ladder instead of failing: an exact result with the quadrature left unevaluated (`integral`), the equation integrated once (`implicit`, e.g. the energy integral of `y'' = f(y)`), a Taylor series of the solution around the start of the interval (`series`), or — when the input contains no derivative at all — the algebraic answer (`algebraic`).
+5. Fall back to numerical solving when none of the exact forms can be produced.
+6. Validate the result with residuals, initial/boundary conditions, convergence, and solver diagnostics.
+7. Return a complete answer, an approximate answer, or the furthest verified partial result with a technical reason.
+
+Both the symbolic sweep and the numerical integration run under hard time, memory, step-count and magnitude caps, so a singular equation such as `y' = tan(y)` is bounded rather than hanging the request.
 
 ترتیب پردازش:
 
 1. تبدیل ورودی به نمایش ریاضی امن
 2. تشخیص مدل از میان مدل‌های پشتیبانی‌شده
 3. تلاش برای حل نمادین
-4. استفاده از حل عددی در صورت نبود جواب بسته
-5. بررسی residual، شرایط اولیه/مرزی، همگرایی و خطا
-6. ارائهٔ جواب کامل، تقریبی یا بیشترین نتیجهٔ معتبر به‌همراه دلیل فنی
+4. در صورت نبود جواب بسته، نردبان جواب ادامه می‌یابد: جواب دقیق با انتگرال بازمانده (`integral`)، معادلهٔ یک بار انتگرال‌گیری‌شده (`implicit`، مانند انتگرال انرژی برای `y'' = f(y)`) یا بسط تیلور جواب (`series`)؛ اگر ورودی هیچ مشتقی نداشته باشد، جواب جبری (`algebraic`)
+5. در نهایت، استفاده از حل عددی
+6. بررسی residual، شرایط اولیه/مرزی، همگرایی و خطا
+7. ارائهٔ جواب کامل، تقریبی یا بیشترین نتیجهٔ معتبر به‌همراه دلیل فنی
+
+حل نمادین و حل عددی هر دو با محدودیت زمان، حافظه، تعداد گام و بزرگی مقدار اجرا می‌شوند؛ بنابراین معادله‌های تکین مانند `y' = tan(y)` به‌جای معطل‌گذاشتن درخواست، محدود می‌شوند.
+
+## Skills layer / لایهٔ مهارت‌ها
+
+Alongside the 42 model families, the engine exposes a registry of independently
+callable skills (`api/skills.py`): a Riccati reduction, a power-series solution, a
+Frobenius series, equilibria with Jacobian classification, the Lyapunov spectrum,
+a bifurcation sweep, a sensitivity analysis and a stiffness scan. Each skill has
+an id, a bilingual description, a token price and one entry point, and each
+returns the same payload shape as the free-form solver. Two of them are the same
+functions the exact solver already calls internally, so the classification layer
+can name the method it intends to use before spending tokens on it. See the
+[Solver skills](/skills) page for the catalog and the endpoints.
+
+در کنار ۴۲ خانوادهٔ مدل، موتور فهرستی از مهارت‌های مستقل (`api/skills.py`) ارائه
+می‌دهد: کاهش ریکاتی، جواب سری توانی، سری فروبنیوس، نقاط تعادل با طبقه‌بندی ژاکوبی،
+طیف لیاپانوف، جاروب دوشاخگی، تحلیل حساسیت و بررسی سختی. هر مهارت شناسهٔ یکتا،
+توضیح دوزبانه، قیمت توکنی و یک نقطهٔ ورود دارد و قالب خروجی آن با حل‌کنندهٔ آزاد یکی است.
 
 ## Stiff and multivariable systems / سیستم‌های stiff و چندمتغیره
 

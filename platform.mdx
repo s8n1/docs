@@ -1,88 +1,135 @@
 ---
-title: "Subscriptions & Admin / اشتراک و مدیریت"
-description: "Accounts, plans, payment gateways, and the admin panel"
+title: "Tokens & Admin / توکن و مدیریت"
+description: "Accounts, the token economy, payment gateways, and the admin panel"
 ---
 
-# Subscriptions & Admin / اشتراک و مدیریت
+# Tokens & Admin / توکن و مدیریت
 
-The solver engine is wrapped in a commercial layer: password accounts, subscription plans with automatic expiry enforcement, three payment gateways (ZarinPal, IDPay, USDT-TRC20), and an admin panel for managing users, subscriptions, orders, and site settings.
+The solver engine is wrapped in a commercial layer: password accounts (email **or username**, never a phone number), a **token economy** where nothing expires with time, three payment gateways (ZarinPal, IDPay, USDT-TRC20), and an admin panel that can see and control every account.
 
-موتور حلکننده با یک لایهٔ تجاری احاطه شده است: حسابهای رمزعبوری، پلنهای اشتراک با اعمال خودکار محدودیت پس از اتمام اعتبار، سه درگاه پرداخت (زرینپال، آیدیپی و USDT-TRC20) و پنل ادمین برای مدیریت کاربران، اشتراکها، سفارشها و تنظیمات سایت.
+موتور حل‌کننده با یک لایهٔ تجاری احاطه شده است: حساب‌های رمزعبوری (ایمیل **یا نام کاربری** — بدون شماره تلفن)، اقتصاد **توکن** که در آن زمان هیچ نقشی ندارد، سه درگاه پرداخت (زرین‌پال، آیدی‌پی و USDT-TRC20) و پنل ادمین که همهٔ حساب‌ها را می‌بیند و کنترل می‌کند.
 
-## Accounts & roles / حسابها و نقشها
+## Accounts & roles / حساب‌ها و نقش‌ها
 
-- **Register / ثبتنام:** `/api/auth/register` — the **first registered user automatically becomes the admin** (there is exactly one recovery path: the first account).
-- **Login / Logout:** `/api/auth/login`, `/api/auth/logout` — sessions are opaque random tokens in an HttpOnly, SameSite=Lax cookie (`de_session`, 30 days).
+- **Fixed admin / ادمین ثابت:** `db.init_db()` seeds the admin account from `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL` (the built-in defaults live in `api/db.py` and are never printed here). It signs in with **username + password only** and never needs an email confirmation or phone number. To reach the panel without sharing that password, promote your own account from the command line: `python3 -m api.cli --list-users`, `--promote <email|username>`, `--set-password <email|username> <password>`, `--demote <email|username>`.
+- **Change password / تغییر رمز:** `POST /api/account/password` (current + new password) works for every account, including the seeded admin, from the `/account` page.
+- **Register / ثبت‌نام:** `/api/auth/register` — email + password + optional username; every new account receives **50 signup tokens** and the role `user`.
+- **Login / ورود:** `/api/auth/login` accepts `identifier` (email **or** username) + password; the legacy `email` field still works. Sessions are opaque random tokens in an HttpOnly, SameSite=Lax cookie (`de_session`, 30 days).
 - **Passwords / رمز عبور:** PBKDF2-HMAC-SHA256 (200k iterations, per-user salt). Minimum length 8.
 - **Banned users / کاربران مسدود:** cannot log in or solve.
 - Admin safety guards: an admin cannot demote or ban their own account, and the last admin cannot be demoted.
 
-## Plans & enforcement / پلنها و اعمال محدودیت
+## Token economy / اقتصاد توکن
 
-Plans live in the `plans` table (Free, Pro Monthly, Pro Yearly seeded by default; editable via SQL or the admin panel for prices/limits).
+Time plays **no** role: token packs never expire. Each operation costs tokens according to difficulty (`api/tokens.py`):
 
-| Field | Meaning |
+| Operation | Tokens |
 |---|---|
-| `solves_per_day` | Daily solve cap (Free: 5, Pro: 100/1000) |
-| `max_points` | Max output points per solve (Free: 500, Pro: 5000/20000) |
-| `premium_models` | Models blocked on the free tier (setting key) |
-| `duration_days` | Subscription length (0 = free tier) |
+| Elementary ODE families (separable, exact, linear, Bernoulli, logistic, …) | 1 |
+| Constant-coefficient, Riccati, Euler–Cauchy, special functions (Legendre, Bessel, Airy, Hermite, Laguerre, Chebyshev) | 2 |
+| Laplace/Fourier/power series, Frobenius, pendulum | 3 |
+| ODE systems (linear, nonlinear, Van der Pol, Lotka–Volterra) | 4 |
+| Stiff systems, chemical kinetics, Lorenz, advection | 5 |
+| Heat/wave equation, boundary value problems | 6 |
+| Eigenvalue (Sturm–Liouville), delay equations | 7 |
+| Laplace/Poisson PDE, reaction–diffusion | 8 |
+| Inverse (optimization) problems | 9 |
+| Free-form solve `/solve/equation` · symbolic `/solve/symbolic` | 4 |
+| Local classification `/analyze` · enhanced `/analyze/enhanced` | 1 · 2 |
+| Skills: `power_series`, `equilibria_stability`, `stiffness_scan` | 3 |
+| Skills: `riccati_reduction`, `frobenius`, `sensitivity_analysis` | 3 · 4 |
+| Skills: `lyapunov_spectrum` · `bifurcation_sweep` | 5 · 6 |
+| Skill match `/skills/match` (same price as local classification) | 1 |
 
-**Automatic restriction / اعمال خودکار محدودیت:** every request re-checks `active_subscription()` — rows whose `ends_at` has passed are flipped to `expired` on read. The account immediately returns to the free tier: premium models are blocked, the daily/points caps apply again, and the UI shows an upgrade banner (HTTP `402` with `code: daily_limit | points_limit | premium_model` and `upgrade_url: /pricing`). No cron job needed.
+Free-form intake (`api/equation_input.py`) accepts a bare right-hand side, `y' = …`, `dy/dt = …`, implicit forms (`y' + 2y = 0`), implicit multiplication (`2y'`), second order (`y'' + 2y' + y = 0`), second-order Leibniz (`d^2y/dt^2`), inline initial conditions (`y' = -2y, y(0) = 1`) and unicode math (′ ″ ² ³ π × − and Persian digits). Presentation is normalised into SymPy and an answer is always returned, tagged with a `kind`: `symbolic` (closed form `y(t) = …`), `integral` (exact with the quadrature left unevaluated), `implicit` (the equation integrated once, e.g. the energy integral of `y'' = f(y)`), `series` (Taylor expansion around the start of the interval) or `algebraic` (input with no derivative: roots of `x^2 - 5x + 6 = 0`, or `y = x^2` solved for `y`). SciPy RK45 → BDF → Radau supplies the numerical curve when the exact answer cannot be sampled. The symbolic sweep and the numerical integration both run under hard time, memory, step-count and magnitude caps. Only an allowlisted mathematical vocabulary reaches SymPy; nothing is ever executed as code.
 
-Symbolic solves (`/solve/symbolic`) are gated by the same quota — there is no free bypass.
+ورودی آزاد (فایل `api/equation_input.py`) همهٔ نمادها را می‌پذیرد: سمت راست معادله، `y' = …`، `dy/dt = …`، فرم ضمنی، ضرب ضمنی، مرتبهٔ دوم، `d^2y/dt^2`، شرایط اولیه داخل متن و ریاضی یونیکد. همیشه یک جواب برمی‌گردد و نوع آن در فیلد `kind` می‌آید: `symbolic` (فرم بسته)، `integral` (دقیق با انتگرال بازمانده)، `implicit` (یک بار انتگرال‌گیری‌شده، مثل انتگرال انرژی برای `y'' = f(y)`)، `series` (بسط تیلور در ابتدای بازه) یا `algebraic` (ورودی بدون مشتق). اگر جواب دقیق قابل نمونه‌گیری نباشد، منحنی عددی SciPy در کنار آن می‌آید؛ حل نمادین و حل عددی هر دو با محدودیت زمان، حافظه و تعداد گام اجرا می‌شوند.
 
-## Payment gateways / درگاههای پرداخت
+Output resolution: every solve includes 500 points; each extra 1000 points adds 1 token. The per-model prices are editable from the admin panel through the `model_token_costs` setting (JSON object, e.g. `{"laplace_pde": 10}`).
 
-Order flow: `POST /api/payment/start` → gateway → callback (ZarinPal/IDPay) or admin confirmation (crypto) → subscription granted/extended.
+زمان هیچ نقشی ندارد: پک‌های توکن منقضی نمی‌شوند. هر عملیات بر اساس سختی، توکن مصرف می‌کند (جدول بالا) و قیمت هر مدل از پنل ادمین با تنظیم `model_token_costs` قابل تغییر است.
+
+**Enforcement / اعمال محدودیت:** every gated request checks the balance server-side before running (`plans.check_access`). A request the balance cannot cover returns HTTP `402` with `code: insufficient_tokens`, `upgrade: true`, and `upgrade_url: /pricing`. Accounts start with 50 tokens; anonymous visitors get a 40-token trial (about ten free-form solves) tied to their session cookie, and the UI turns that limit into a signup prompt instead of a dead end.
+
+## Balances & ledger / موجودی و دفتر کل
+
+- `users.token_balance` — account wallet; `sessions.tokens` — anonymous trial wallet.
+- `token_ledger` — append-only log of every grant/charge (`owner`, `delta`, `reason`, `balance_after`), used for the account page history and the admin ledger view.
+- `GET /api/my-tokens` — the caller's balance, total spent, and recent movements.
+- Admin accounts are **unlimited**: solves never debit them and never block.
+
+## Payment gateways / درگاه‌های پرداخت
+
+Order flow: `POST /api/payment/start` → gateway → callback (ZarinPal/IDPay) or admin confirmation (crypto) → **the pack's tokens are credited** to the buyer.
 
 | Gateway | How it works | Required config |
 |---|---|---|
-| ZarinPal (v4) | Redirect to bank payment; callback verifies with the gateway | `ZARINPAL_MERCHANT_ID` (+ `ZARINPAL_SANDBOX=1` for testing) |
+| ZarinPal (v4) | Redirect to bank payment; callback verifies with the gateway. Amount is sent in Rial (`currency: IRR`) by default; set `ZARINPAL_CURRENCY=IRT` to send Toman. Verify codes `100` **and** `101` (already verified) count as success | `ZARINPAL_MERCHANT_ID` (+ `ZARINPAL_SANDBOX=1` for testing) |
 | IDPay (v1.1) | Redirect to bank payment; callback verifies with the gateway | `IDPAY_API_KEY` (+ `IDPAY_SANDBOX=1`) |
-| USDT-TRC20 | Direct transfer to the admin wallet; user submits a TXID; admin confirms in the panel | `USDT_TRC20_WALLET` or admin setting `usdt_wallet` |
+| USDT-TRC20 | Direct transfer to the admin wallet; the user submits a TXID; the admin confirms in the panel (Tronscan link provided) | `USDT_TRC20_WALLET` or admin setting `usdt_wallet` |
 
 Security notes:
 
 - Crypto TXIDs can only be submitted for the caller's own orders.
-- An order can be confirmed **once** — replayed callbacks or a second admin click cannot double-grant a plan.
-- Callback/verify failures never activate a subscription.
+- An order can be confirmed **once** — replayed callbacks (including ZarinPal's `101`) or a second admin click cannot credit twice.
+- Callback/verify failures never credit tokens.
+- Missing gateway credentials produce a clear HTTP `503`, never a silent failure.
 
 ## Admin panel / پنل مدیریت
 
 `/admin` (or `/static/admin.html`) — admin-only:
 
-- **Dashboard / داشبورد:** user counts, active subscriptions, orders, revenue by currency, solves today.
-- **Users / کاربران:** role changes, grant/extend subscriptions (manual), ban/unban.
-- **Orders / سفارشها:** review every order; confirm pending crypto payments.
-- **Settings / تنظیمات:** `usdt_wallet` and `premium_models` (JSON array of model names).
+- **Dashboard / داشبورد:** users, admins, banned, tokens outstanding/added/spent, orders (paid and awaiting confirmation), revenue by currency, solves today.
+- **Users / کاربران:** every account with its token balance and lifetime spend; add/remove tokens with a free-form delta, grant a token pack, change roles, ban/unban.
+- **Orders / سفارش‌ها:** review every order, confirm crypto payments (link to the transaction on Tronscan).
+- **Token ledger / گردش توکن:** the last 100 movements across all accounts.
+- **Settings / تنظیمات:** `usdt_wallet` and `model_token_costs` (JSON object of model name → token price).
 
 All admin routes live under `/api/admin/*` and require the admin role server-side.
+
+## Privacy & access / حریم خصوصی و دسترسی
+
+- **Nobody but the admin sees project data / داده‌ها فقط برای ادمین:** every `/api/admin/*` route answers `401` to anonymous visitors and `403` to signed-in non-admins; an account only ever reads its own user object, token history, and orders.
+- **Login throttle / محدودیت ورود:** 8 failed attempts for the same identifier + client host within 5 minutes are answered with `429` until the window slides past, so the admin password cannot be brute-forced. A successful login clears the counter.
+- **Cookies / کوکی:** sessions are `HttpOnly`, `SameSite=Lax`, and `Secure` automatically whenever the request arrives over HTTPS.
+- **No wildcard CORS / بدون CORS باز:** the API grants no cross-origin access, so third-party sites cannot script it from a browser.
+- **No secrets in git / بدون راز در گیت:** `.env`, `data/`, and `*.db` are git-ignored, and the SQLite database is never served by the app (only `web/` is mounted).
+- **Rotate the admin password / تغییر رمز ادمین:** set `ADMIN_PASSWORD` (and `ADMIN_USERNAME`) per deployment instead of relying on the built-in default, or change it from `/account` while signed in (`POST /api/account/password`). `python3 -m api.cli --set-password <account>` resets any account locally.
 
 ## API summary / خلاصهٔ API
 
 ```text
-POST /api/auth/register | /login | /logout
-GET  /api/me                     → user + entitlement
-GET  /api/plans                  → plan catalog
+POST /api/auth/register | /login | /logout      (login accepts email or username)
+GET  /api/me                     → user + token entitlement (balance, prices)
+POST /api/account/password       → change the signed-in account's password
+GET  /api/my-tokens              → balance + token history
+GET  /api/plans                  → token packs
 GET  /api/my-orders              → own orders
+POST /solve/equation             → free-form ODE (any notation) → always an answer
+                                   (symbolic · integral · implicit · series · algebraic · numeric)
+GET  /skills                     → the skills catalog (free)
+POST /skills/match               → rank skills against a plain-language request
+POST /skills/{skill_id}          → run one named skill (priced per skill)
 POST /api/payment/start          → {gateway, redirect_url | wallet, order_id}
 GET  /api/payment/zarinpal/callback  (Authority, Status)
 GET  /api/payment/idpay/callback     (id, order_id)
 POST /api/payment/crypto/tx      → submit TXID
-GET  /api/admin/stats | /users | /orders | /settings
+GET  /api/admin/stats | /users | /orders | /settings | /tokens/ledger
 PATCH /api/admin/users/{id}/role | /ban
-POST /api/admin/subscriptions/grant
-POST /api/admin/orders/{id}/confirm
+POST /api/admin/users/{id}/tokens    → adjust balance (delta)
+POST /api/admin/tokens/grant         → credit a pack
+POST /api/admin/orders/{id}/confirm  → credit tokens once
 POST /api/admin/settings
 ```
+
+402 responses (not enough tokens) carry `code: insufficient_tokens`, `upgrade: true`, and `upgrade_url: /pricing`.
 
 ## Trying it locally / تست محلی
 
 ```bash
 npm run api          # → http://localhost:8000
-# 1) register at /auth            → first account is the admin
-# 2) /admin                       → grant yourself a plan (no payment needed)
-# 3) /pricing → USDT → TXID       → confirm from /admin → PRO active
-# 4) expire it (SQL or wait)      → free tier limits apply automatically
+# 1) /auth            → sign in with the admin username + password (username only, no phone)
+# 2) /pricing         → buy a token pack with ZarinPal or USDT-TRC20
+# 3) /admin           → see every account, adjust tokens, confirm crypto orders
+# 4) /account         → balance, per-model token costs, and token history
 ```

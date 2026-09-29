@@ -1,11 +1,12 @@
-"""SQLite persistence layer: users, sessions, plans, subscriptions,
-payment orders, usage counters, and settings.
+"""SQLite persistence layer: users, sessions, plans (token packs), payment
+orders, usage counters, token wallets/ledger, and settings.
 
 Single-file database (stdlib sqlite3) — the app carries everything it needs.
+Schema changes are applied in-place by `_migrate()` so an existing database
+keeps working after an upgrade.
 """
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -14,20 +15,29 @@ from typing import Any
 
 DB_PATH = Path(os.environ.get("DIFFEQ_DB", "data/app.db"))
 
+# The fixed administrator account. It is created idempotently on startup and
+# logs in with username + password only (no phone number, no email needed).
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "13811372")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@diffeq.local")
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT,
     email         TEXT UNIQUE NOT NULL,
     name          TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'user',
     banned        INTEGER NOT NULL DEFAULT 0,
+    token_balance INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
     user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    tokens     INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     last_seen  TEXT NOT NULL
@@ -41,21 +51,10 @@ CREATE TABLE IF NOT EXISTS plans (
     price_rial     INTEGER NOT NULL,
     price_usdt     REAL NOT NULL,
     duration_days  INTEGER NOT NULL,
-    solves_per_day INTEGER NOT NULL,
+    solves_per_day INTEGER NOT NULL DEFAULT 0,
+    tokens         INTEGER NOT NULL DEFAULT 0,
     max_points     INTEGER NOT NULL,
     description    TEXT NOT NULL DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS subscriptions (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    plan_slug  TEXT NOT NULL,
-    starts_at  TEXT NOT NULL,
-    ends_at    TEXT NOT NULL,
-    status     TEXT NOT NULL DEFAULT 'active',
-    source     TEXT NOT NULL DEFAULT 'manual',
-    order_id   INTEGER,
-    created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS payment_orders (
@@ -83,27 +82,45 @@ CREATE TABLE IF NOT EXISTS usage (
     PRIMARY KEY (owner, owner_id, day)
 );
 
+CREATE TABLE IF NOT EXISTS token_ledger (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner         TEXT NOT NULL,
+    owner_id      TEXT NOT NULL,
+    delta         INTEGER NOT NULL,
+    reason        TEXT NOT NULL,
+    balance_after INTEGER NOT NULL,
+    created_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_token_ledger_owner ON token_ledger(owner, owner_id);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
 """
 
+# Token packs. Tokens never expire — time plays no role in the subscription.
 _DEFAULT_PLANS: list[tuple[Any, ...]] = [
-    ("free", "Free", "رایگان", 0, 0, 0.0, 0, 5, 500,
-     "Limited daily solves for trying the engine."),
-    ("pro_monthly", "Pro Monthly", "حرفه‌ای ماهانه", 590_000, 5_900_000, 20.0, 30, 100, 5_000,
-     "Full access for one month."),
-    ("pro_yearly", "Pro Yearly", "حرفه‌ای سالانه", 5_900_000, 59_000_000, 200.0, 365, 1_000, 20_000,
-     "Full access for one year."),
+    ("free", "Free", "رایگان", 0, 0, 0.0, 0, 0, 50, 20_000,
+     "۵۰ توکن هدیه هنگام ثبت‌نام — بدون نیاز به پرداخت."),
+    ("pack_basic", "Basic pack", "پک پایه", 290_000, 2_900_000, 9.0, 0, 0, 500, 20_000,
+     "۵۰۰ توکن برای استفادهٔ سبک و متوسط."),
+    ("pack_pro", "Pro pack", "پک حرفه‌ای", 990_000, 9_900_000, 29.0, 0, 0, 2_000, 20_000,
+     "۲۰۰۰ توکن؛ بهترین ارزش برای کار روزمره."),
+    ("pack_mega", "Mega pack", "پک ویژه", 3_900_000, 39_000_000, 99.0, 0, 0, 10_000, 20_000,
+     "۱۰٬۰۰۰ توکن برای کار سنگین و تیمی."),
 ]
 
+# Time-based plans from before the token migration are retired.
+_LEGACY_PLAN_SLUGS = ("pro_monthly", "pro_yearly")
+
+# Tokens credited once to still-active time-based subscribers at migration time.
+_LEGACY_SUBSCRIPTION_TOKENS = {"pro_monthly": 500, "pro_yearly": 2_000}
+
 _DEFAULT_SETTINGS: dict[str, str] = {
-    "premium_models": json.dumps([
-        "inverse_problem", "eigenvalue", "reaction_diffusion",
-        "laplace_pde", "poisson_pde",
-    ]),
     "usdt_wallet": "",
+    "model_token_costs": "{}",
 }
 
 
@@ -119,31 +136,134 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bring an older database up to the current schema (idempotent)."""
+
+    def columns(table: str) -> set[str]:
+        return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+    user_cols = columns("users")
+    if "username" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN username TEXT")
+    if "token_balance" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN token_balance INTEGER NOT NULL DEFAULT 0")
+    if "tokens" not in columns("sessions"):
+        conn.execute("ALTER TABLE sessions ADD COLUMN tokens INTEGER NOT NULL DEFAULT 0")
+    if "tokens" not in columns("plans"):
+        conn.execute("ALTER TABLE plans ADD COLUMN tokens INTEGER NOT NULL DEFAULT 0")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username "
+        "ON users(username) WHERE username IS NOT NULL"
+    )
+
+
+def _seed_plans(conn: sqlite3.Connection) -> None:
+    conn.executemany(
+        """INSERT OR IGNORE INTO plans
+           (slug, name_en, name_fa, price_toman, price_rial, price_usdt,
+            duration_days, solves_per_day, tokens, max_points, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        _DEFAULT_PLANS,
+    )
+    conn.executemany(
+        "DELETE FROM plans WHERE slug = ?", [(slug,) for slug in _LEGACY_PLAN_SLUGS]
+    )
+
+
+def _ensure_admin() -> None:
+    """Create the fixed admin account if it does not exist yet.
+
+    Login for this account needs only username + password (no phone number,
+    no email confirmation). The credentials can be overridden with the
+    ADMIN_USERNAME / ADMIN_PASSWORD environment variables.
+    """
+    from api import auth  # local import: auth imports db at module level
+
+    username = ADMIN_USERNAME.strip().lower()
+    email = ADMIN_EMAIL.strip().lower()
+    existing = query_one("SELECT id FROM users WHERE username = ? OR email = ?", (username, email))
+    if existing is not None:
+        return
+    execute(
+        "INSERT OR IGNORE INTO users (username, email, name, password_hash, role, banned, "
+        "token_balance, created_at) VALUES (?, ?, ?, ?, 'admin', 0, 0, ?)",
+        (username, email, "Administrator", auth.hash_password(ADMIN_PASSWORD), utcnow()),
+    )
+
+
+def _migrate_legacy_subscriptions(conn: sqlite3.Connection) -> None:
+    """Credit tokens once for time-based subscriptions left from before the
+    token migration, so nobody loses access when the plans were retired."""
+    tables = {row["name"] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "subscriptions" not in tables:
+        return
+    rows = conn.execute(
+        "SELECT user_id, plan_slug FROM subscriptions "
+        "WHERE status = 'active' AND ends_at > ?", (utcnow(),),
+    ).fetchall()
+    for row in rows:
+        credit = _LEGACY_SUBSCRIPTION_TOKENS.get(row["plan_slug"])
+        if not credit:
+            continue
+        reason = f"legacy-migration:{row['user_id']}"
+        already = conn.execute(
+            "SELECT 1 FROM token_ledger WHERE reason = ?", (reason,)).fetchone()
+        if already:
+            continue
+        current = conn.execute(
+            "SELECT token_balance FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        new_balance = int(current["token_balance"] if current else 0) + credit
+        conn.execute("UPDATE users SET token_balance = ? WHERE id = ?", (new_balance, row["user_id"]))
+        conn.execute(
+            "INSERT INTO token_ledger (owner, owner_id, delta, reason, balance_after, created_at) "
+            "VALUES ('user', ?, ?, ?, ?, ?)",
+            (str(row["user_id"]), credit, reason, new_balance, utcnow()),
+        )
+
+
 def init_db() -> None:
-    """Create the schema and seed defaults (idempotent)."""
+    """Create the schema, apply migrations, and seed defaults (idempotent)."""
     conn = connect()
     try:
         conn.executescript(_SCHEMA)
-        conn.executemany(
-            """INSERT OR IGNORE INTO plans
-               (slug, name_en, name_fa, price_toman, price_rial, price_usdt,
-                duration_days, solves_per_day, max_points, description)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            _DEFAULT_PLANS,
-        )
+        _migrate(conn)
+        _migrate_legacy_subscriptions(conn)
+        _seed_plans(conn)
         for key, value in _DEFAULT_SETTINGS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
         conn.commit()
     finally:
         conn.close()
+    _ensure_admin()
+
+
+def find_user(identifier: str) -> dict[str, Any] | None:
+    """Look an account up by email or username (case-insensitive)."""
+    needle = (identifier or "").strip().lower()
+    if not needle:
+        return None
+    return query_one(
+        "SELECT id, username, email, name, role, banned, token_balance "
+        "FROM users WHERE lower(email) = ? OR lower(username) = ?",
+        (needle, needle),
+    )
+
+
+def set_role(user_id: int, role: str) -> None:
+    execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+
+
+def set_password_hash(user_id: int, password_hash: str) -> None:
+    execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
 
 
 def reset_db() -> None:
     """Drop every table and re-initialize (used by tests)."""
     conn = connect()
     try:
-        for table in ("usage", "subscriptions", "payment_orders", "sessions",
-                      "users", "settings", "plans"):
+        for table in ("token_ledger", "usage", "payment_orders", "subscriptions",
+                      "sessions", "users", "settings", "plans"):
             conn.execute(f"DROP TABLE IF EXISTS {table}")
         conn.commit()
     finally:
@@ -192,3 +312,4 @@ def set_setting(key: str, value: str) -> None:
         conn.commit()
     finally:
         conn.close()
+

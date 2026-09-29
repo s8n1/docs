@@ -1,0 +1,67 @@
+name: CI
+
+# The engine is Python, so that is where the real gate lives: the same commands
+# documented in ruff.toml and run locally (`npm run lint`, `npm run test:all`).
+# The web layer is checked for syntax only — a full install would pull the whole
+# Mintlify toolchain for what is a handful of browser scripts, and the
+# TypeScript check (tsconfig has `checkJs: false`) verifies nothing yet.
+#
+#   pip install -r requirements-dev.txt
+#   ruff check .
+#   pytest api/ -q
+#   python -m api.cli --verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: Lint, tests and model catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Tests
+        run: pytest api/ -q
+
+      - name: Verify all 42 model families
+        run: python -m api.cli --verify
+
+  web:
+    name: Browser script syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check syntax
+        run: |
+          for file in web/*.js; do
+            echo "node --check $file"
+            node --check "$file"
+          done
