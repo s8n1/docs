@@ -13,7 +13,7 @@ The solver engine is wrapped in a commercial layer: password accounts (email **o
 
 - **Fixed admin / ادمین ثابت:** `db.init_db()` seeds the admin account from `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL` (the built-in defaults live in `api/db.py` and are never printed here). It signs in with **username + password only** and never needs an email confirmation or phone number. To reach the panel without sharing that password, promote your own account from the command line: `python3 -m api.cli --list-users`, `--promote <email|username>`, `--set-password <email|username> <password>`, `--demote <email|username>`.
 - **Change password / تغییر رمز:** `POST /api/account/password` (current + new password) works for every account, including the seeded admin, from the `/account` page.
-- **Register / ثبت‌نام:** `/api/auth/register` — email + password + optional username; every new account receives **50 signup tokens** and the role `user`.
+- **Register / ثبت‌نام:** `/api/auth/register` — email + password + optional username; every new account receives **5 signup tokens** and the role `user`.
 - **Login / ورود:** `/api/auth/login` accepts `identifier` (email **or** username) + password; the legacy `email` field still works. Sessions are opaque random tokens in an HttpOnly, SameSite=Lax cookie (`de_session`, 30 days).
 - **Passwords / رمز عبور:** PBKDF2-HMAC-SHA256 (200k iterations, per-user salt). Minimum length 8.
 - **Banned users / کاربران مسدود:** cannot log in or solve.
@@ -49,7 +49,7 @@ Output resolution: every solve includes 500 points; each extra 1000 points adds 
 
 زمان هیچ نقشی ندارد: پک‌های توکن منقضی نمی‌شوند. هر عملیات بر اساس سختی، توکن مصرف می‌کند (جدول بالا) و قیمت هر مدل از پنل ادمین با تنظیم `model_token_costs` قابل تغییر است.
 
-**Enforcement / اعمال محدودیت:** every gated request checks the balance server-side before running (`plans.check_access`). A request the balance cannot cover returns HTTP `402` with `code: insufficient_tokens`, `upgrade: true`, and `upgrade_url: /pricing`. Accounts start with 50 tokens; anonymous visitors get a 40-token trial (about ten free-form solves) tied to their session cookie, and the UI turns that limit into a signup prompt instead of a dead end.
+**Enforcement / اعمال محدودیت:** every gated request checks the balance server-side before running (`plans.check_access`). A request the balance cannot cover returns HTTP `402` with `code: insufficient_tokens`, `upgrade: true`, and `upgrade_url: /pricing`. Accounts start with 5 tokens (enough for one symbolic solve); anonymous visitors get a 2-token trial tied to their session cookie, and the UI turns that limit into a signup prompt instead of a dead end.
 
 ## Balances & ledger / موجودی و دفتر کل
 

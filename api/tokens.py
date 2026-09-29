@@ -86,8 +86,8 @@ TOOL_COSTS: dict[str, int] = {
     "analyze_enhanced": 2,
 }
 
-SIGNUP_TOKENS = 50      # credited to every new account
-ANON_TOKENS = 40        # trial balance for anonymous sessions (10 symbolic solves)
+SIGNUP_TOKENS = 5       # credited to every new account
+ANON_TOKENS = 2         # trial balance for anonymous sessions
 
 POINTS_INCLUDED = 500   # every solve includes this many output points
 POINTS_PER_EXTRA_TOKEN = 1_000  # +1 token per extra 1000 points

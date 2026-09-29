@@ -10,6 +10,7 @@ from api.equation_input import (
     parse_equation,
     solve_algebraic,
     solve_equation,
+    solve_numeric,
     solve_symbolic,
 )
 
@@ -246,3 +247,65 @@ def test_time_span_must_increase():
 def test_third_order_is_rejected_with_a_clear_message():
     with pytest.raises(EquationError, match="second-order"):
         parse_equation("y''' = y")
+
+
+# ======================================================================
+# Every dead end carries a reason
+# ======================================================================
+def test_numeric_failure_says_what_went_wrong():
+    """A blow-up must explain itself, not just fail.
+
+    ``y' = y²`` with ``y(0) = 1`` is ``1/(1-t)``, which runs away before t = 1;
+    the magnitude guard stops it and the outcome names the cause.
+    """
+    outcome = solve_numeric(parse_equation("y' = y^2"), (0.0, 2.0), [1.0], 50)
+
+    assert not outcome.ok
+    assert outcome.reason
+    assert "without bound" in outcome.reason
+
+
+def test_impossible_equation_explains_every_attempt(monkeypatch):
+    """The last-resort branch reports why each strategy failed.
+
+    The free-form intake almost always answers, so this drives the branch where
+    the exact sweep, the series and the integration all fail, and checks that
+    each reason reaches the user instead of a bare "it did not work".
+    """
+    import api.equation_input as eq
+
+    monkeypatch.setattr(eq, "_symbolic_guarded", lambda *a, **k: (None, "exact said no"))
+    monkeypatch.setattr(eq, "solve_series", lambda *a, **k: None)
+    monkeypatch.setattr(eq, "solve_numeric", lambda *a, **k: eq.NumericOutcome(
+        False, "", [], [], float("inf"), "numeric said no"))
+
+    result = solve_equation("y' = y^2 + t^2", t_span=(0.0, 1.0), initial=[0.5])
+
+    assert result["status"] == "failed"
+    assert "exact said no" in result["hint"]
+    assert "Taylor expansion" in result["hint"]
+    assert "numeric said no" in result["hint"]
+
+
+def test_exact_search_timeout_is_explained(monkeypatch):
+    """When the bounded exact sweep is killed, the reason says so."""
+    import api.equation_input as eq
+
+    monkeypatch.setattr(eq, "SYMBOLIC_TIMEOUT_SECONDS", 0.0)
+    payload, reason = eq._symbolic_guarded("y' = sin(t)*y + t", "y", "t", (0.0, 1.0), [1.0], 16)
+
+    assert payload is None
+    assert reason and "time limit" in reason
+
+
+def test_exact_search_reason_is_reported_when_only_that_path_is_asked(monkeypatch):
+    """A symbolic-only request explains why no closed form was reached."""
+    import api.equation_input as eq
+
+    monkeypatch.setattr(eq, "_symbolic_guarded", lambda *a, **k: (
+        None, "the exact solver ran out of memory or stopped before answering."))
+
+    result = solve_equation("y' = sin(t)*y + t", t_span=(0.0, 1.0), symbolic_only=True)
+
+    assert result["status"] == "failed"
+    assert "ran out of memory" in result["hint"]

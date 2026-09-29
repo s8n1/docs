@@ -31,6 +31,18 @@ def _admin() -> TestClient:
     return c
 
 
+def _grant(client: TestClient, delta: int) -> None:
+    """Credit tokens for a test that needs more than the signup gift.
+
+    Goes through the admin endpoint so the test does not silently depend on how
+    large the gift happens to be, and uses its own client so the caller's
+    session cookies are untouched.
+    """
+    uid = client.get("/api/me").json()["user"]["id"]
+    res = _admin().post(f"/api/admin/users/{uid}/tokens", json={"delta": delta, "reason": "test"})
+    assert res.status_code == 200, res.text
+
+
 def test_seeded_admin_exists_and_can_sign_in():
     c = _client()
     res = c.post("/api/auth/login", json=ADMIN_LOGIN)
@@ -221,13 +233,17 @@ def test_solve_debits_tokens_by_model_difficulty():
     assert res.status_code == 200
     assert _balance(c) == tokens.SIGNUP_TOKENS - tokens.model_costs()["separable"]
 
+    # The signup gift is deliberately small, so fund the account rather than
+    # assuming it covers a chaotic system.
+    _grant(c, 20)
+
     lorenz = _solve_body(model="lorenz", variables=["x", "y", "z"],
                          initial_values=[1.0, 1.0, 1.0],
                          parameters={"sigma": 10.0, "rho": 28.0, "beta": 2.6666666666666665},
                          t_span=[0.0, 1.0])
     res = c.post("/solve", json=lorenz)
     assert res.status_code == 200
-    assert _balance(c) == tokens.SIGNUP_TOKENS - 1 - tokens.model_costs()["lorenz"]
+    assert _balance(c) == tokens.SIGNUP_TOKENS - 1 + 20 - tokens.model_costs()["lorenz"]
 
 
 def test_empty_balance_returns_402_insufficient_tokens():
@@ -247,6 +263,7 @@ def test_symbolic_analyze_and_enhanced_consume_tool_tokens(monkeypatch):
 
     monkeypatch.setattr("api.main.analyze_equation", _offline)
     c, _ = _register()
+    _grant(c, 20)   # this test measures costs, not the size of the signup gift
     start = _balance(c)
 
     res = c.post("/solve/symbolic", json={"equation": "-y", "variable": "y", "independent": "t"})
@@ -285,9 +302,10 @@ def test_token_cost_override_from_settings():
     assert tokens.cost_for("logistic") == 7
 
     c, _ = _register()
+    _grant(c, 20)   # the signup gift alone would not cover a 7-token override
     res = c.post("/solve", json=_solve_body())
     assert res.status_code == 200
-    assert _balance(c) == tokens.SIGNUP_TOKENS - 7
+    assert _balance(c) == tokens.SIGNUP_TOKENS + 20 - 7
 
     bad = admin.post("/api/admin/settings", json={
         "key": "model_token_costs", "value": '{"logistic": "many"}'})
