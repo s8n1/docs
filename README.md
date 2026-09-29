@@ -156,8 +156,8 @@ The product is a monetized web app on top of the solver engine:
   are spent per operation by difficulty: 1 token for the elementary ODE families
   up to 9 for inverse problems, 4 for a symbolic solve, 1 for local
   classification. Beyond the included 500 output points, each extra 1000 points
-  costs 1 more token. New accounts get 50 signup tokens; anonymous visitors get a
-  40-token trial session (10 symbolic solves) tied to their cookie.
+  costs 1 more token. New accounts get 5 signup tokens (enough for one symbolic
+  solve); anonymous visitors get a 2-token trial session tied to their cookie.
 - **Enforcement** — every gated call checks the balance server-side and returns
   HTTP `402` with `code: insufficient_tokens` and `upgrade_url: /pricing` when the
   balance cannot cover the operation. Admin accounts are unlimited.

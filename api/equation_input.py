@@ -974,17 +974,52 @@ class _CurveLimit(RuntimeError):
     """Raised inside the RHS wrapper to stop a runaway numerical integration."""
 
 
+@dataclass
+class NumericOutcome:
+    """A numerical curve, or the reason one could not be produced.
+
+    ``reason`` is set exactly when no curve was produced, so an impossible
+    request can always be explained to the user rather than collapsing into
+    "it did not work".
+    """
+    ok: bool
+    method: str
+    t: list[float]
+    y: list[list[float]]
+    residual: float
+    reason: str | None
+
+
+def _one_line(text: Any) -> str:
+    """A single trimmed line, so a solver message is safe to show to a user."""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    return lines[0] if lines else ""
+
+
+def _attempt_reason(attempts: list[tuple[str, str]]) -> str:
+    """One readable sentence from the per-method failures."""
+    if not attempts:
+        return "no integration method was available for this equation."
+    messages = [message for _method, message in attempts]
+    if len(set(messages)) == 1:
+        return messages[0]
+    return "; ".join(f"{method}: {message}" for method, message in attempts)
+
+
 def solve_numeric(parsed: ParsedEquation, t_span: tuple[float, float], initial: list[float],
-                  points: int) -> tuple[list[float], list[list[float]], float, str] | None:
+                  points: int) -> NumericOutcome:
     """Integrate the ODE, trying an explicit method then stiff implicit ones.
 
     The right-hand side is wrapped so a blow-up (infinite or astronomically
     large values) and a step-size collapse both abort the attempt instead of
-    spinning forever.
+    spinning forever. When every method fails, the outcome carries the reason
+    each one gave, so the caller can tell the user what actually happened.
     """
     rhs = _numeric_rhs(parsed)
     if rhs is None:
-        return None
+        return NumericOutcome(False, "", [], [], float("inf"),
+                              "the right-hand side still contains unresolved symbols, so it "
+                              "cannot be integrated numerically.")
     grid = np.linspace(t_span[0], t_span[1], points)
 
     def raw(t: float, state: np.ndarray) -> list[float]:
@@ -1013,16 +1048,25 @@ def solve_numeric(parsed: ParsedEquation, t_span: tuple[float, float], initial: 
     if len(state0) < parsed.order:
         state0 += [0.0] * (parsed.order - len(state0))
 
+    failures: list[tuple[str, str]] = []
     for method in ("RK45", "BDF", "Radau"):
         try:
             solution = solve_ivp(wrapped, t_span, state0, method=method, t_eval=grid,
                                  rtol=NUMERIC_RTOL, atol=NUMERIC_ATOL, max_step=np.inf)
-        except Exception:                             # noqa: BLE001 - report, then retry stiff
+        except Exception as exc:                      # noqa: BLE001 - report, then retry stiff
+            failures.append((method, _one_line(exc) or "the integrator failed."))
             continue
-        if not solution.success or solution.y.shape[1] != grid.size:
+        if not solution.success:
+            failures.append((method, _one_line(solution.message)
+                             or "the integrator did not converge."))
+            continue
+        if solution.y.shape[1] != grid.size:
+            failures.append((method, "the integrator returned a different number of samples "
+                                      "than requested."))
             continue
         values = solution.y.T
         if not np.all(np.isfinite(values)):
+            failures.append((method, "the solution left the real numbers on this interval."))
             continue
         rows = [[float(v) for v in row] for row in values]
         # Measuring the accuracy means integrating the same problem again at a
@@ -1033,8 +1077,8 @@ def solve_numeric(parsed: ParsedEquation, t_span: tuple[float, float], initial: 
         allowance = NUMERIC_MAX_EVALS
         residual = integration_error(wrapped, t_span, state0, grid, method,
                                      NUMERIC_RTOL, NUMERIC_ATOL, np.inf, values)
-        return solution.t.tolist(), rows, residual, method
-    return None
+        return NumericOutcome(True, method, solution.t.tolist(), rows, residual, None)
+    return NumericOutcome(False, "", [], [], float("inf"), _attempt_reason(failures))
 
 
 # ---------------------------------------------------------------------------
@@ -1119,22 +1163,24 @@ def _sweep_child(conn: Any, text: str, variable: str, independent: str,
 
 def _symbolic_guarded(text: str, variable: str, independent: str,
                       span: tuple[float, float], initial: list[float],
-                      count: int) -> dict[str, Any] | None:
+                      count: int) -> tuple[dict[str, Any] | None, str | None]:
     """Run the exact sweep under a hard time and memory cap.
 
-    Returns a plain dict (``kind``, ``pretty``, ``particular``, ``branches``,
-    ``t``, ``y``) or ``None`` when the worker overran, crashed, or the platform
-    cannot fork. ``None`` simply means "no exact answer available" — the caller
-    then falls back to the Taylor series and the numerical solution.
+    Returns ``(payload, reason)``. The payload is a plain dict (``kind``,
+    ``pretty``, ``particular``, ``branches``, ``t``, ``y``) when an exact answer
+    was reached. Otherwise it is ``None`` and ``reason`` says what stopped the
+    search — the worker overran its time limit, ran out of memory, or the
+    platform cannot fork — so the caller can explain that instead of silently
+    falling back to the Taylor series and the numerical solution.
     """
     if not hasattr(os, "fork"):
-        return None
+        return None, "the exact solver cannot run in this environment."
     try:
         import multiprocessing
 
         ctx = multiprocessing.get_context("fork")
     except (ImportError, ValueError):
-        return None
+        return None, "the exact solver could not be started."
     try:
         parent_conn, child_conn = ctx.Pipe(duplex=False)
         proc = ctx.Process(
@@ -1144,12 +1190,15 @@ def _symbolic_guarded(text: str, variable: str, independent: str,
         )
         proc.start()
     except Exception:
-        return None
+        return None, "the exact solver could not be started."
     child_conn.close()
     payload: dict[str, Any] | None = None
+    timed_out = False
     try:
         if parent_conn.poll(SYMBOLIC_TIMEOUT_SECONDS):
             payload = parent_conn.recv()
+        else:
+            timed_out = True
     except (EOFError, OSError):
         payload = None
     finally:
@@ -1163,18 +1212,22 @@ def _symbolic_guarded(text: str, variable: str, independent: str,
             parent_conn.close()
         except Exception:
             pass
-    return payload if isinstance(payload, dict) else None
+    if isinstance(payload, dict):
+        return payload, None
+    if timed_out:
+        return None, (f"the exact solver hit its {SYMBOLIC_TIMEOUT_SECONDS:g}s time limit "
+                      "on this equation.")
+    return None, "the exact solver ran out of memory or stopped before answering."
 
 
 def _attach_curve(payload: dict[str, Any], parsed: ParsedEquation, span: tuple[float, float],
                   initial: list[float], count: int) -> bool:
     """Add the numerical trajectory to a payload that already has an exact answer."""
-    numeric = solve_numeric(parsed, span, initial, count)
-    if numeric is None:
+    outcome = solve_numeric(parsed, span, initial, count)
+    if not outcome.ok:
         return False
-    t_vals, y_vals, residual, _method = numeric
-    payload["t"], payload["y"] = t_vals, y_vals
-    payload["residual_max"] = residual
+    payload["t"], payload["y"] = outcome.t, outcome.y
+    payload["residual_max"] = outcome.residual
     return True
 
 
@@ -1266,8 +1319,8 @@ def solve_equation(text: str, variable: str = "y", independent: str = "t",
     # 1. An exact answer, in whatever form SymPy can reach. This runs in a
     #    bounded worker process, because SymPy's integrator can otherwise consume
     #    minutes and gigabytes on an ordinary-looking equation.
-    exact = _symbolic_guarded(text, parsed.variable, parsed.independent, span,
-                              explicit_initial, count)
+    exact, symbolic_reason = _symbolic_guarded(text, parsed.variable, parsed.independent, span,
+                                               explicit_initial, count)
     if exact is not None:
         payload.update({
             "status": "success",
@@ -1297,10 +1350,14 @@ def solve_equation(text: str, variable: str = "y", independent: str = "t",
 
     if symbolic_only:
         payload["message"] = "No exact solution was found for this equation."
+        if symbolic_reason:
+            payload["hint"] = f"Why: {symbolic_reason}"
         return payload
 
     # 2. No closed form: give the Taylor series of the solution plus the curve.
     series = solve_series(parsed, span[0], curve_initial)
+    series_reason = (None if series is not None else
+                     "a Taylor expansion of the solution could not be computed on this interval.")
     if series is not None:
         payload.update({
             "status": "success",
@@ -1327,22 +1384,31 @@ def solve_equation(text: str, variable: str = "y", independent: str = "t",
 
     # 3. Last resort: the numerical solution on its own.
     numeric = solve_numeric(parsed, span, curve_initial, count)
-    if numeric is not None:
-        t_vals, y_vals, residual, method = numeric
+    if numeric.ok:
         payload.update({
             "status": "success",
             "kind": "numeric",
-            "method": method,
-            "t": t_vals,
-            "y": y_vals,
-            "residual_max": residual,
+            "method": numeric.method,
+            "t": numeric.t,
+            "y": numeric.y,
+            "residual_max": numeric.residual,
             "message": "Verified numerical solution.",
             "hint": "Add initial conditions to plot the curve for your specific problem.",
         })
         return payload
 
+    # Nothing worked. Say so, and say why: every attempt above recorded its own
+    # reason instead of failing silently, so the user is never left with a dead
+    # end and no explanation.
+    reasons = [(label, reason) for label, reason in (
+        ("exact", symbolic_reason),
+        ("series", series_reason),
+        ("numerical", numeric.reason),
+    ) if reason]
     payload["message"] = ("No closed form, series or real numerical solution could be "
                           "produced on this interval.")
-    payload["hint"] = ("Try a shorter time span, different initial values, or one of the "
-                       "42 model families in the Model solver tab.")
+    advice = ("Try a shorter time span, different initial values, or one of the "
+              "42 model families in the Model solver tab.")
+    why = "; ".join(f"{label}: {reason}" for label, reason in reasons)
+    payload["hint"] = f"Why — {why}. {advice}" if why else advice
     return payload

@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -31,6 +32,22 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 db.init_db()
 
 app = FastAPI(title="Differential Equation Intelligence API", version="0.5.0")
+
+
+@app.exception_handler(RequestValidationError)
+def _invalid_request(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Say which field is wrong, without echoing the request back.
+
+    FastAPI's default handler returns pydantic's raw list *and* the submitted
+    body — which sent passwords straight back to the browser and gave the UI
+    nothing readable to show the user. Only the field name and the message are
+    kept here.
+    """
+    problems = []
+    for error in exc.errors():
+        location = ".".join(str(part) for part in error.get("loc", ()) if part != "body")
+        problems.append(f"{location or 'request'}: {error.get('msg') or 'is not valid'}")
+    return JSONResponse(status_code=422, content={"detail": "; ".join(problems) or "Invalid request."})
 
 # The UI is served by this same app, so no cross-origin access is granted on
 # purpose: a wildcard CORS policy would let any site script the API.
@@ -433,7 +450,8 @@ def _token_summary(entitlement: dict[str, Any], charged: int,
 @app.post("/solve")
 def solve(body: SolveBody, request: Request, response: Response) -> dict[str, object]:
     if body.model not in MODEL_NAMES:
-        raise HTTPException(400, "Unknown model adapter")
+        raise HTTPException(400, f"Unknown model '{body.model}'. Choose one of the 42 model "
+                                 "families — GET /models lists them all.")
     entitlement, user, session = _resolve_entitlement(request, response)
     cost = tokens.cost_for(body.model, body.points)
     try:
@@ -505,7 +523,9 @@ def enhanced_analyze(body: AnalyzeBody, request: Request,
         result["language"] = body.language
         provider = "local-fallback"
     if result.get("model") not in MODEL_NAMES:
-        raise HTTPException(422, "AI selected an unsupported model")
+        raise HTTPException(422, f"The classifier chose '{result.get('model')}', which is not one "
+                                 "of the 42 supported model families. Rephrase the request, or "
+                                 "pick a model from GET /models.")
     # Only a skill id the catalog knows may come back from the provider.
     spec = skills.get_skill(str(result.get("skill") or ""))
     result["skill"] = spec.id if spec else None
@@ -636,7 +656,13 @@ def symbolic(body: SymbolicBody, request: Request, response: Response) -> dict[s
     except EquationError as exc:
         raise HTTPException(422, str(exc)) from exc
     if result.get("status") != "success" or not result.get("solution"):
-        raise HTTPException(422, "No exact solution was found for this equation")
+        # Always say why an exact answer was not reached, and where to go next.
+        reason = str(result.get("message") or "").strip() or "No closed form was reached."
+        why = str(result.get("hint") or "").strip()
+        raise HTTPException(422, " ".join(part for part in (
+            reason, why,
+            "The same equation can still be solved numerically through /solve/equation.",
+        ) if part))
     remaining = _record_tool(entitlement, user, session, cost, "symbolic")
     return {
         "status": "success",

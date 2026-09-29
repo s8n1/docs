@@ -481,13 +481,28 @@ async function api(path, body) {
   let data = null;
   try { data = await res.json(); } catch (_) { /* empty body */ }
   if (!res.ok) {
-    const msg = (data && (data.detail || data.message)) || `HTTP ${res.status}`;
-    const err = new Error(typeof msg === "string" ? msg : (msg && msg.message ? msg.message : JSON.stringify(msg)));
+    const raw = (data && (data.detail !== undefined ? data.detail : data.message)) || `HTTP ${res.status}`;
+    const err = new Error(describeError(raw));
     err.status = res.status;
-    err.detail = msg && typeof msg === "object" ? msg : null;
+    err.detail = raw && typeof raw === "object" ? raw : null;
     throw err;
   }
   return data;
+}
+
+/* A validation failure arrives as a list of field problems; turn it into a
+   sentence instead of dumping JSON at the user. */
+function describeError(raw) {
+  if (Array.isArray(raw)) {
+    const parts = raw.map((item) => {
+      if (!item || typeof item !== "object") return String(item);
+      const where = Array.isArray(item.loc) ? item.loc.filter((p) => p !== "body").join(".") : "";
+      return [where, item.msg].filter(Boolean).join(": ");
+    }).filter(Boolean);
+    return parts.join("; ") || "Invalid request.";
+  }
+  if (raw && typeof raw === "object") return String(raw.message || JSON.stringify(raw));
+  return String(raw);
 }
 
 function setBanner(kind, msg) {

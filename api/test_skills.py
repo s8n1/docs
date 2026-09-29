@@ -21,6 +21,20 @@ from api.skills import (
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def funded_anon_session(monkeypatch):
+    """Each test starts with a fresh anonymous session, funded for the test.
+
+    The real trial balance is deliberately tiny, so it is raised here: these
+    tests are about the API surface and its charging behaviour, not about how
+    large the free trial is.
+    """
+    monkeypatch.setattr(tokens, "ANON_TOKENS", 500)
+    client.post("/api/auth/logout", json={})
+    yield
+    client.post("/api/auth/logout", json={})
+
+
 def _ok(skill_id, **body):
     result = run_skill(skill_id, body)
     assert result["status"] == "success", (skill_id, result["message"])

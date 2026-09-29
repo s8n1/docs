@@ -4,14 +4,20 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from api import tokens
 from api.main import app
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def fresh_anon_session():
-    """Each test starts with a fresh anonymous trial-token budget."""
+def fresh_anon_session(monkeypatch):
+    """Each test starts with a fresh anonymous session, funded for the test.
+
+    The real trial balance is deliberately tiny, so it is raised here: these
+    tests are about endpoint behaviour, not about how large the free trial is.
+    """
+    monkeypatch.setattr(tokens, "ANON_TOKENS", 500)
     client.post("/api/auth/logout", json={})
     yield
     client.post("/api/auth/logout", json={})
@@ -83,6 +89,30 @@ def test_solve_unknown_model_is_rejected():
     }
     res = client.post("/solve", json=body)
     assert res.status_code == 400
+    # The rejection names the offending model and where the valid ones live.
+    detail = res.json()["detail"]
+    assert "not_a_model" in detail and "/models" in detail
+
+
+def test_symbolic_endpoint_explains_why_there_is_no_closed_form():
+    """A symbolic-only request must say why it failed and where to go next."""
+    res = client.post("/solve/symbolic", json={"equation": "y' = y^2 + t^2"})
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert "no exact solution" in detail.lower()
+    assert "/solve/equation" in detail
+
+
+def test_validation_errors_are_readable_and_hide_the_submitted_password():
+    """A rejected request names the bad field and never echoes the body back."""
+    res = client.post("/api/auth/register", json={
+        "email": "probe@example.com", "username": "probe", "password": "hunter2-secret",
+    })
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert isinstance(detail, str)
+    assert "name" in detail          # the missing field is named
+    assert "hunter2-secret" not in res.text
 
 
 def test_solve_rejects_unsafe_input():
